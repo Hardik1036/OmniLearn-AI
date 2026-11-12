@@ -1,0 +1,225 @@
+name: Build & Publish Native System App Releases
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without leading v (e.g. 1.0.0)"
+        required: false
+        default: "1.0.0"
+
+jobs:
+  build-desktop:
+    name: Build Desktop (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            arch: x64
+            add_data_sep: ";"
+          - platform: macos
+            os: macos-latest
+            arch: universal
+            add_data_sep: ":"
+          - platform: linux
+            os: ubuntu-latest
+            arch: x64
+            add_data_sep: ":"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Determine Release Version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version || '1.0.0' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Dependencies & PyInstaller
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            PY=".venv/Scripts/python.exe"
+            PIP=".venv/Scripts/pip.exe"
+          else
+            PY=".venv/bin/python"
+            PIP=".venv/bin/pip"
+          fi
+          "$PY" -m pip install --upgrade pip
+          "$PIP" install -r requirements.txt pyinstaller
+
+      - name: Build Windows Executable & Installer
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/release | Out-Null
+          .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --paths . --name OmniLearn `
+            --add-data "frontend;frontend" --add-data "database;database" `
+            backend/local_app/app_launcher.py
+          if (Test-Path "packaging/installer.iss") {
+            iscc /DAppVersion=${{ steps.meta.outputs.version }} packaging/installer.iss
+          }
+          if (-not (Test-Path "dist/release/OmniLearn-Setup-${{ steps.meta.outputs.version }}.exe")) {
+            Compress-Archive -Path dist/OmniLearn/* -DestinationPath "dist/release/OmniLearn-Windows-${{ steps.meta.outputs.version }}.zip" -Force
+          }
+
+      - name: Build macOS Application & DMG
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          .venv/bin/pyinstaller --noconfirm --clean --windowed --paths . --name OmniLearn \
+            --add-data "frontend:frontend" --add-data "database:database" \
+            backend/local_app/app_launcher.py
+          hdiutil create -volname "OmniLearn AI" -srcfolder dist/OmniLearn.app \
+            -ov -format UDZO "dist/release/OmniLearn-${{ steps.meta.outputs.version }}-universal.dmg"
+
+      - name: Build Linux AppImage
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0 libfuse2
+          mkdir -p dist/release dist/AppDir/usr/bin dist/AppDir/usr/share/applications
+          .venv/bin/pyinstaller --noconfirm --clean --windowed --paths . --name OmniLearn \
+            --add-data "frontend:frontend" --add-data "database:database" \
+            backend/local_app/app_launcher.py
+          cp -r dist/OmniLearn/* dist/AppDir/usr/bin/
+          cat > dist/AppDir/AppRun <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/usr/bin/OmniLearn" "$@"
+          EOF
+          chmod +x dist/AppDir/AppRun
+          cat > dist/AppDir/omnilearn.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=OmniLearn AI
+          Exec=OmniLearn
+          Icon=omnilearn
+          Categories=Education;
+          EOF
+          cp dist/AppDir/omnilearn.desktop dist/AppDir/usr/share/applications/
+          cp frontend/icons/icon.svg dist/AppDir/omnilearn.svg || true
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run dist/AppDir \
+            "dist/release/OmniLearn-${{ steps.meta.outputs.version }}-x86_64.AppImage"
+
+      - name: Generate SHA-256 Checksum
+        shell: bash
+        run: |
+          cd dist/release
+          sha256sum * > "SHA256-${{ matrix.platform }}.txt" || shasum -a 256 * > "SHA256-${{ matrix.platform }}.txt"
+
+      - name: Upload Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/release/*
+
+  build-android:
+    name: Build Android Capacitor APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Determine Release Version
+        id: meta
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version || '1.0.0' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build Capacitor Android APK
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          if [[ -f packaging/capacitor.config.json ]]; then
+            cp packaging/capacitor.config.json capacitor.config.json
+            node -e "const fs=require('fs'),c=JSON.parse(fs.readFileSync('capacitor.config.json'));c.webDir='frontend';fs.writeFileSync('capacitor.config.json',JSON.stringify(c,null,2));"
+          else
+            npx cap init "OmniLearn AI" "ai.omnilearn.app" --web-dir frontend
+          fi
+          npx cap add android
+          npx cap sync android
+          cd android && ./gradlew assembleDebug
+          mkdir -p ../dist/release
+          cp app/build/outputs/apk/debug/app-debug.apk "../dist/release/OmniLearn-${{ steps.meta.outputs.version }}.apk"
+          cd ../dist/release
+          sha256sum * > SHA256-android.txt
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/release/*
+
+  publish-release:
+    name: Publish GitHub Release & Mirror to R2
+    needs: [build-desktop, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Built Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Combine Checksums
+        run: |
+          cat artifacts/SHA256-*.txt > artifacts/SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+
+      - name: Mirror Installers to Cloudflare R2 (Zero Egress)
+        if: github.ref_type == 'tag' && secrets.CLOUDFLARE_API_TOKEN != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          for file in artifacts/*.exe artifacts/*.dmg artifacts/*.AppImage artifacts/*.apk; do
+            [[ -e "$file" ]] || continue
+            fname="$(basename "$file")"
+            npx --yes wrangler@latest r2 object put "omnilearn-releases/${TAG}/${fname}" --file="$file" --remote
+          done

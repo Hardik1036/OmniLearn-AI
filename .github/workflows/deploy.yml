@@ -1,0 +1,90 @@
+name: OmniLearn Test & Cloudflare Web Lite Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-verify:
+    name: Verify Schemas, Syntax & Pytest Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Create Virtual Environment & Install Requirements
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+
+      - name: Validate D1 & Local SQLite Schemas + Seed Data
+        run: |
+          .venv/bin/python - <<'PY'
+          import pathlib, sqlite3
+          schema = pathlib.Path("database/schema.sql").read_text(encoding="utf-8")
+          local_schema = pathlib.Path("database/local_schema.sql").read_text(encoding="utf-8")
+          seed = pathlib.Path("database/seed.sql").read_text(encoding="utf-8")
+          assert "PRAGMA journal_mode" not in schema.upper()
+          conn_d1 = sqlite3.connect(":memory:")
+          conn_d1.executescript(schema + "\n" + seed)
+          conn_local = sqlite3.connect(":memory:")
+          conn_local.executescript(schema + "\n" + local_schema + "\n" + seed)
+          print("SQLite D1 + Local FTS5 schema & seed checks passed.")
+          PY
+
+      - name: Compile-check Python Worker & Local App Modules
+        run: |
+          .venv/bin/python -m compileall -q backend/src backend/local_app
+
+      - name: Syntax-check Shared Frontend JavaScript
+        run: |
+          shopt -s globstar nullglob
+          for f in frontend/js/*.js frontend/js/**/*.js; do
+            node --check "$f"
+          done
+
+      - name: Run Automated Pytest Suite
+        run: |
+          .venv/bin/pytest -v
+
+  cloudflare-deploy:
+    name: Deploy Web Lite Portal to Cloudflare Free Tier
+    needs: test-and-verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.CLOUDFLARE_API_TOKEN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Apply Cloudflare D1 Schema & Idempotent Seed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@latest d1 execute omnilearn-db --remote --file=./database/schema.sql
+          npx --yes wrangler@latest d1 execute omnilearn-db --remote --file=./database/seed.sql
+
+      - name: Deploy Python Worker & Static Assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

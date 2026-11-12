@@ -1,0 +1,33 @@
+name = "omnilearn-exam-ai"
+main = "backend/src/main.py"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["python_workers"]
+
+[assets]
+directory = "./frontend"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+binding = "ASSETS"
+
+[vars]
+RUNTIME_MODE = "web_lite"
+
+# Replace database_id after running: npx wrangler d1 create omnilearn-db
+[[d1_databases]]
+binding = "DB"
+database_name = "omnilearn-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# Zero-egress object storage for slide JPEGs and System App installers
+[[r2_buckets]]
+binding = "SLIDES_BUCKET"
+bucket_name = "omnilearn-slides"
+
+[[r2_buckets]]
+binding = "RELEASES_BUCKET"
+bucket_name = "omnilearn-releases"
+
+# Replace id after running: npx wrangler kv namespace create APP_CACHE
+[[kv_namespaces]]
+binding = "APP_CACHE"
+id = "00000000000000000000000000000000"

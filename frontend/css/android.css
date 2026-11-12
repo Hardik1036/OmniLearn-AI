@@ -1,0 +1,162 @@
+/* OmniLearn AI — Mobile & Android Capacitor / PWA Stylesheet */
+@media (max-width: 899px) {
+  .top-bar {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .top-bar-center {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    min-height: 48px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    font-size: 1.25rem;
+    cursor: pointer;
+  }
+
+  .workspace-body {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-tabs {
+    display: none;
+  }
+
+  /* Slide-over Android / Mobile Navigation Drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 320px);
+    height: 100vh;
+    z-index: 90;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: var(--shadow-lg);
+    padding-top: max(18px, env(safe-area-inset-top));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  .sidebar.drawer-open {
+    transform: translateX(0);
+  }
+
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: rgba(15, 23, 42, 0.52);
+  }
+
+  .main-workspace {
+    padding: 14px 12px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  /* >= 48px Touch Targets Across Mobile Controls */
+  .btn,
+  .pill-tab,
+  .filter-chip,
+  .mcq-option,
+  .plan-task-row,
+  .pdf-check-row,
+  .desktop-tab-btn {
+    min-height: 48px;
+  }
+
+  /* Prevent Android WebView / Chrome Auto-Zoom on Focus */
+  input,
+  select,
+  textarea,
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px !important;
+    min-height: 48px;
+  }
+
+  /* Horizontal Swipe Pill Rows */
+  .pill-strip,
+  .subtab-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .pill-strip::-webkit-scrollbar,
+  .subtab-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .spatial-grid-2x2,
+  .spatial-grid-1x2,
+  .sources-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  /* Fixed Android Bottom Navigation Above Gesture Bar */
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-subtle);
+    padding: 4px 4px max(6px, env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.08);
+  }
+
+  .bottom-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 48px;
+    padding: 4px 2px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.67rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .bottom-nav-btn .nav-ico {
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+
+  .bottom-nav-btn.active {
+    color: var(--color-navy);
+    background: var(--color-blue-soft);
+  }
+
+  .toast-banner {
+    left: 12px;
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    max-width: none;
+  }
+}

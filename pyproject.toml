@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnilearn-exam-ai"
+version = "1.0.0"
+description = "OmniLearn AI — Installable System Application & Cloudflare Free-Plan Web Lite Exam Mastery Engine"
+requires-python = ">=3.11"
+# Keep Worker dependencies empty so Cloudflare Python Worker stays within Free Tier (<=128 MB RAM, <=10 ms CPU).
+dependencies = []
+
+[project.optional-dependencies]
+local = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "pydantic>=2.9.0",
+    "pywebview>=5.3",
+    "httpx>=0.27.2",
+    "beautifulsoup4>=4.12.3",
+    "trafilatura>=1.12.2",
+    "pymupdf>=1.24.10",
+    "openpyxl>=3.1.5",
+    "python-pptx>=1.0.2",
+    "charset-normalizer>=3.4.0",
+    "youtube-transcript-api>=0.6.2",
+    "yt-dlp>=2024.10.22",
+    "opencv-python>=4.10.0.84",
+    "numpy>=2.1.0",
+    "keyring>=25.5.0",
+    "cryptography>=43.0.3",
+]
+test = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.2",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -q"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

@@ -1,0 +1,20 @@
+{
+  "name": "OmniLearn AI — Multi-Source Exam Mastery",
+  "short_name": "OmniLearn",
+  "description": "Offline-first multi-source AI study workspace with PDF, PPTX, XLSX, YouTube, Web, and multi-window video synthesis.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1E3A8A",
+  "background_color": "#0F172A",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

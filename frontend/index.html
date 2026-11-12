@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1E3A8A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="OmniLearn AI — Multi-Source Exam Mastery Engine across Desktop, Android, and Cloudflare Web Lite." />
+  <title>OmniLearn AI — Multi-Source Exam Mastery</title>
+
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon.svg" />
+
+  <!-- Modular Pure CSS3 Architecture -->
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/layout.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/android.css" />
+  <link rel="stylesheet" href="/css/system-app.css" />
+
+  <!-- KaTeX Math Rendering (graceful fallback if offline) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+  <!-- Mermaid Strict Security Rendering (graceful fallback if offline) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" crossorigin="anonymous"></script>
+
+  <!-- ESM ImportMap for Google Lit 3 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "lit": "https://esm.sh/lit@3.2.1",
+      "lit/": "https://esm.sh/lit@3.2.1/",
+      "lit/directives/": "https://esm.sh/lit@3.2.1/directives/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <omnilearn-app id="omnilearn-root">
+    <div class="boot-shell">
+      <div class="boot-card">
+        <img src="/icons/icon.svg" alt="OmniLearn Logo" width="56" height="56" />
+        <h1>OmniLearn AI</h1>
+        <p id="boot-status-text">Initializing Multi-Source Exam Mastery Workspace...</p>
+        <button id="boot-retry-btn" class="btn btn-primary hidden" type="button" onclick="window.location.reload()">Retry Connection</button>
+      </div>
+    </div>
+  </omnilearn-app>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.mermaid && typeof window.mermaid.initialize === 'function') {
+        try {
+          window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: 'default',
+            fontFamily: 'inherit'
+          });
+        } catch (_err) {
+          // Non-fatal fallback if mermaid cannot initialize
+        }
+      }
+
+      if (
+        'serviceWorker' in navigator &&
+        (window.location.protocol === 'https:' ||
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1')
+      ) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+          // Non-fatal in environments restricting SW registration (e.g., custom WebViews)
+        });
+      }
+    });
+  </script>
+
+  <script type="module">
+    import('/js/app.js').catch((err) => {
+      const statusEl = document.getElementById('boot-status-text');
+      const retryBtn = document.getElementById('boot-retry-btn');
+      if (statusEl) {
+        statusEl.textContent =
+          'Offline or CDN blocked while loading Lit 3 ESM runtime. Connect briefly or use cached System App shell. (' +
+          (err && err.message ? err.message : 'Module load failed') +
+          ')';
+      }
+      if (retryBtn) {
+        retryBtn.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
