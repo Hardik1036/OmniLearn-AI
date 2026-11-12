@@ -26,18 +26,21 @@ except ImportError:
     to_js = None  # type: ignore
     HAS_WEB_CRYPTO = False
 
-# Generated once per isolate/process if MASTER_SECRET is omitted in local/unit-test mocks.
-_EPHEMERAL_DEV_SECRET = secrets.token_urlsafe(32)
+# Generated lazily if MASTER_SECRET is omitted in local/unit-test mocks.
+_EPHEMERAL_DEV_SECRET: str | None = None
 
 
 def get_master_secret(env: Any = None) -> str:
     """Resolve the AES-GCM & JWT signing secret from Worker secrets or process env."""
+    global _EPHEMERAL_DEV_SECRET
     secret = env_str(env, "MASTER_SECRET") or env_str(env, "JWT_SECRET")
     if secret:
         return secret
     env_secret = os.environ.get("MASTER_SECRET") or os.environ.get("JWT_SECRET")
     if env_secret:
         return env_secret
+    if _EPHEMERAL_DEV_SECRET is None:
+        _EPHEMERAL_DEV_SECRET = secrets.token_urlsafe(32)
     return _EPHEMERAL_DEV_SECRET
 
 

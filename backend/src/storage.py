@@ -78,10 +78,7 @@ def validate_jpeg_bytes(data: bytes) -> None:
 
 
 def _get_slides_bucket(env: Any) -> Any:
-    bucket = env_get(env, "SLIDES_BUCKET", None)
-    if bucket is None:
-        raise RuntimeError("R2 binding `SLIDES_BUCKET` is not configured on env")
-    return bucket
+    return env_get(env, "SLIDES_BUCKET", None)
 
 
 def _to_uint8_array(data: bytes) -> Any:
@@ -109,6 +106,8 @@ async def upload_slide(
     raw = bytes(data)
     validate_jpeg_bytes(raw)
     bucket = _get_slides_bucket(env)
+    if bucket is None:
+        return {"ok": False, "error": "R2 storage not configured on Cloudflare", "key": clean_key}
 
     if isinstance(bucket, dict):
         bucket[clean_key] = {"body": raw, "content_type": content_type}
@@ -143,6 +142,8 @@ async def fetch_slide(env: Any, key: str) -> tuple[bytes, str] | None:
     """Validate key and retrieve `(bytes, content_type)` from R2 `SLIDES_BUCKET`."""
     clean_key = sanitize_r2_key(key)
     bucket = _get_slides_bucket(env)
+    if bucket is None:
+        return None
 
     if isinstance(bucket, dict):
         entry = bucket.get(clean_key)

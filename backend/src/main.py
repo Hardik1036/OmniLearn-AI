@@ -1883,5 +1883,13 @@ async def handle_request(request: Any, env: Any) -> Any:
 class Default(WorkerEntrypoint):
     """Cloudflare Python Worker entrypoint (`wrangler.toml: main = 'src/main.py'`)."""
 
+    async def on_fetch(self, request: Any) -> Any:
+        return await handle_request(request, self.env)
+
     async def fetch(self, request: Any) -> Any:
         return await handle_request(request, self.env)
+
+
+async def on_fetch(request: Any, env: Any = None) -> Any:
+    """Top-level handler for Cloudflare Python Worker runtime."""
+    return await handle_request(request, env)

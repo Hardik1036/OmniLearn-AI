@@ -16,18 +16,18 @@ RUNTIME_MODE = "web_lite"
 [[d1_databases]]
 binding = "DB"
 database_name = "omnilearn-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "99ffa183-d55e-4897-a585-b91766ec0db4"
 
-# Zero-egress object storage for slide JPEGs and System App installers
-[[r2_buckets]]
-binding = "SLIDES_BUCKET"
-bucket_name = "omnilearn-slides"
+# Zero-egress object storage for slide JPEGs and System App installers (enable in Cloudflare Dashboard if needed)
+# [[r2_buckets]]
+# binding = "SLIDES_BUCKET"
+# bucket_name = "omnilearn-slides"
 
-[[r2_buckets]]
-binding = "RELEASES_BUCKET"
-bucket_name = "omnilearn-releases"
+# [[r2_buckets]]
+# binding = "RELEASES_BUCKET"
+# bucket_name = "omnilearn-releases"
 
 # Replace id after running: npx wrangler kv namespace create APP_CACHE
 [[kv_namespaces]]
 binding = "APP_CACHE"
-id = "00000000000000000000000000000000"
+id = "4e909a1df2124dc0ad15ba3c655f2444"
