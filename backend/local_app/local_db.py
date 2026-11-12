@@ -481,10 +481,11 @@ class LocalDatabase:
     def sync_admin_from_env(self) -> bool:
         """Synchronize single-admin credentials from `.env` if configured."""
         try:
-            from .env_config import get_env_admin_credentials
+            from .env_config import get_env_admin_credentials, load_dotenv_file
         except ImportError:
-            from env_config import get_env_admin_credentials
+            from env_config import get_env_admin_credentials, load_dotenv_file
 
+        load_dotenv_file()
         creds = get_env_admin_credentials()
         if creds is None:
             return False
@@ -537,10 +538,11 @@ class LocalDatabase:
     def sync_default_keys_from_env(self) -> int:
         """Encrypt & synchronize `.env` API keys into `api_keys` (`is_default = 1`)."""
         try:
-            from .env_config import get_configured_env_api_keys
+            from .env_config import get_configured_env_api_keys, load_dotenv_file
         except ImportError:
-            from env_config import get_configured_env_api_keys
+            from env_config import get_configured_env_api_keys, load_dotenv_file
 
+        load_dotenv_file()
         env_keys = get_configured_env_api_keys()
         desired: dict[str, tuple[str, str]] = {}
         for _slot_label, provider, raw_val in env_keys:
