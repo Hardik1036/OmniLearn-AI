@@ -390,7 +390,7 @@ export class OmnilearnApp extends LitElement {
       });
       this.ftsResults = Array.isArray(res) ? res : Array.isArray(res?.results) ? res.results : [];
     } catch (err) {
-      this._showToast(err?.message || 'FTS5 search failed.', 'error');
+      this._showToast(err?.message || 'Smart search failed.', 'error');
       this.ftsResults = [];
     } finally {
       this.ftsLoading = false;
@@ -814,25 +814,23 @@ export class OmnilearnApp extends LitElement {
             />
           </div>
 
-          <!-- Multi-API Pool Summary Pill (Ctrl 12) -->
+          <!-- AI Study Assistant Status -->
           <div class="sidebar-section">
-            <span class="sidebar-label">AI Load Balancer</span>
+            <span class="sidebar-label">AI Study Assistant</span>
             <div class="row-between">
-              <span class="badge ${webLite ? 'badge-amber' : 'badge-emerald'}">
-                ${webLite
-                  ? `🌐 ${Math.min(1, poolCount)}/1 Slot (Cloud Preview)`
-                  : `⚡ ${poolCount} Keys Active`}
+              <span class="badge badge-emerald">
+                🟢 Ready
               </span>
               <button
                 type="button"
                 class="btn btn-outline btn-sm"
                 @click=${() => this._selectTab('sources')}
               >
-                Manage
+                Settings
               </button>
             </div>
             <div class="text-xs text-muted">
-              Role: ${this.role === 'guest_lite' ? 'Guest Preview' : 'Single Admin'}
+              ${this.role === 'guest_lite' ? 'Guest Preview' : 'Signed In'}
             </div>
           </div>
 

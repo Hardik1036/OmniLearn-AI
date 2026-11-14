@@ -33,7 +33,7 @@ export function checkCapability(edition, feature, context = {}) {
       return {
         allowed: false,
         feature,
-        message: 'Local SQLite FTS5 full-text search across PDFs, spreadsheets, and transcripts requires the Downloaded System App.',
+        message: 'Instant smart search across all lecture PDFs, spreadsheets, and video transcripts requires the Desktop App.',
       };
     case 'inspect_url_pdfs':
       return {
@@ -72,7 +72,7 @@ export function checkCapability(edition, feature, context = {}) {
           allowed: false,
           limit: WEB_LITE_LIMITS.maxPoolKeys,
           feature,
-          message: `Web Lite caps the Multi-API Pool at ${WEB_LITE_LIMITS.maxPoolKeys} active slot. System App unlocks unlimited key rotation.`,
+          message: 'Desktop App unlocks custom unlimited AI assistant keys with automatic rate-limit cooldown.',
         };
       }
       return { allowed: true, limit: WEB_LITE_LIMITS.maxPoolKeys, feature };

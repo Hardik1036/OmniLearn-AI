@@ -12,7 +12,7 @@ const FALLBACK_RELEASES = [
     download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
     sha256: 'verified-on-release-checksum',
     size_bytes: 48234496,
-    release_notes: 'Native Edge WebView2 Desktop System App + SQLite WAL/FTS5',
+    release_notes: 'Native Desktop App with instant offline smart search & private storage',
   },
   {
     id: 'rel-mac',
@@ -304,7 +304,7 @@ python -m backend.local_app.app_launcher</code></pre>
                           <td>Local instant smart search across all notes, slides, and transcripts</td>
                         </tr>
                         <tr>
-                          <td><strong>Multi-API Key Pool</strong></td>
+                          <td><strong>Smart AI Study Engine</strong></td>
                           <td>1 active key slot</td>
                           <td>Unlimited Gemini + Groq keys with 65s automatic rate-limit cooldown</td>
                         </tr>
@@ -321,7 +321,7 @@ python -m backend.local_app.app_launcher</code></pre>
           </div>
 
           <div class="row-between" style="padding-top: 8px; border-top: 1px solid var(--border-subtle);">
-            <span class="text-xs text-muted">Hosted via Cloudflare R2 / GitHub Releases</span>
+            <span class="text-xs text-muted">Official Releases Verified &amp; Secured</span>
             <button type="button" class="btn btn-outline" @click=${this._close}>
               🚀 Continue in Cloud Preview
             </button>

@@ -13,6 +13,7 @@ export class OmnilearnNotesView extends LitElement {
     courseData: { type: Object },
     activeSubjectId: { type: String },
     activeSlideModal: { type: Object, state: true },
+    exportDropdownOpen: { type: Boolean, state: true },
   };
 
   constructor() {
@@ -21,6 +22,7 @@ export class OmnilearnNotesView extends LitElement {
     this.courseData = { course: null, rois: [], subjects: [], sources: [] };
     this.activeSubjectId = '';
     this.activeSlideModal = null;
+    this.exportDropdownOpen = false;
   }
 
   createRenderRoot() {
@@ -159,13 +161,56 @@ export class OmnilearnNotesView extends LitElement {
               )}
             </div>
 
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              @click=${() => exportNotesMarkdown(subject, courseTitle, this.edition)}
-            >
-              📥 Download Notes (.MD) ${webLite ? '🔒' : ''}
-            </button>
+            <!-- Material 3 Split Button for Notes Export -->
+            <div class="split-button-container split-outline">
+              <button
+                type="button"
+                class="btn btn-outline btn-sm split-button-action"
+                @click=${() => exportNotesMarkdown(subject, courseTitle, this.edition)}
+              >
+                📥 Download Notes (.MD) ${webLite ? '🔒' : ''}
+              </button>
+              <div class="split-button-divider"></div>
+              <button
+                type="button"
+                class="btn btn-outline btn-sm split-button-trigger"
+                aria-label="Export options"
+                aria-expanded=${this.exportDropdownOpen}
+                @click=${(e) => {
+                  e.stopPropagation();
+                  this.exportDropdownOpen = !this.exportDropdownOpen;
+                }}
+              >
+                ▾
+              </button>
+
+              ${this.exportDropdownOpen
+                ? html`
+                    <div class="split-dropdown-menu">
+                      <button
+                        type="button"
+                        class="split-dropdown-item"
+                        @click=${() => {
+                          this.exportDropdownOpen = false;
+                          exportNotesMarkdown(subject, courseTitle, this.edition);
+                        }}
+                      >
+                        📝 Download Markdown (.MD)
+                      </button>
+                      <button
+                        type="button"
+                        class="split-dropdown-item"
+                        @click=${() => {
+                          this.exportDropdownOpen = false;
+                          window.print();
+                        }}
+                      >
+                        🖨️ Print / Save as PDF
+                      </button>
+                    </div>
+                  `
+                : nothing}
+            </div>
           </div>
         </div>
 

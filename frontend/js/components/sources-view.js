@@ -78,6 +78,7 @@ export class OmnilearnSourcesView extends LitElement {
     poolProvider: { type: String, state: true },
     poolApiKey: { type: String, state: true },
     poolBusy: { type: Boolean, state: true },
+    searchDropdownOpen: { type: Boolean, state: true },
   };
 
   constructor() {
@@ -90,6 +91,7 @@ export class OmnilearnSourcesView extends LitElement {
     this.activeSubTab = 'search';
     this.searchQuery = '';
     this.searchFilter = 'all';
+    this.searchDropdownOpen = false;
     this.searchResults = [];
     this.searching = false;
     this.inspectedUrlMap = {};
@@ -624,7 +626,7 @@ export class OmnilearnSourcesView extends LitElement {
         append_subject: Boolean(this.appendSubject),
       });
       this.synthProgress = 100;
-      this._notifyUpdated('Subject study pack synthesized online via Multi-API Pool!', 'notes');
+      this._notifyUpdated('Subject study pack synthesized successfully!', 'notes');
     } catch (err) {
       this.errorMessage = err?.message || 'Course synthesis failed.';
     } finally {
@@ -653,7 +655,7 @@ export class OmnilearnSourcesView extends LitElement {
     this.poolBusy = true;
     try {
       await apiClient.addPoolKey({ provider: this.poolProvider, api_key: rawKey });
-      this._notifyPoolUpdated('API key encrypted and added to Multi-API Pool.');
+      this._notifyPoolUpdated('Custom AI key saved securely.');
     } catch (err) {
       this.errorMessage = err?.message || 'Could not add API key.';
     } finally {
@@ -900,126 +902,81 @@ export class OmnilearnSourcesView extends LitElement {
               </button>
             </div>
 
-            <!-- Multi-API Pool Manager (Zero-Leakage Anonymous Slots) -->
+            <!-- AI Study Assistant (Google M3 Card - Student Focused) -->
             <div class="card stack-md">
               <div class="row-between">
-                <h3>🔑 AI Study Keys Pool</h3>
-                <span class="badge ${webLite ? 'badge-amber' : 'badge-emerald'}">
-                  ${webLite ? `${slots.length}/1 Active Key` : `${slots.length} Active Keys`}
+                <div class="row-wrap" style="gap: 8px;">
+                  <span style="font-size: 1.25rem;">✨</span>
+                  <h3 style="margin: 0; font-size: 1.05rem;">AI Study Assistant</h3>
+                </div>
+                <span class="badge badge-emerald">
+                  🟢 Ready
                 </span>
               </div>
-              <div class="text-xs text-muted">
-                ${this.pool?.using_source === 'personal'
-                  ? 'Personal AI Keys active (stored securely and never displayed).'
-                  : this.pool?.using_source === 'cloud_relay'
-                  ? 'Cloud AI Relay active. You can paste your own personal key below anytime to customize.'
-                  : this.pool?.using_source === 'default_env'
-                  ? 'Default AI Study Keys active. Add your own key below to customize for your account.'
-                  : 'Keys are securely stored and encrypted. Zero key characters are ever displayed.'}
+              <div class="text-xs text-muted" style="line-height: 1.5;">
+                OmniLearn AI generates university study notes, mathematical formulas, and active-recall exam packs from your lecture sources.
               </div>
 
-              ${Array.isArray(this.pool?.invalid_format_warnings) && this.pool.invalid_format_warnings.length > 0
-                ? html`
-                    <div class="alert-warning" style="margin: 8px 0; padding: 10px 12px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; font-size: 0.8rem; color: #fbbf24;">
-                      <strong>⚠️ Key Format Diagnostic:</strong>
-                      <ul style="margin: 4px 0 0 16px; padding: 0;">
-                        ${this.pool.invalid_format_warnings.map((w) => html`<li>${w}</li>`)}
-                      </ul>
-                      <div style="margin-top: 4px; font-size: 0.75rem; color: #d1d5db;">
-                        Gemini keys must start with <code>AIzaSy...</code> (from Google AI Studio). OAuth access tokens (starting with <code>AQ.</code> or <code>ya29.</code>) cannot be used as API keys.
-                      </div>
-                    </div>
-                  `
-                : nothing}
-
-              ${slots.length === 0
-                ? html`<div class="text-sm text-muted">No API keys active yet. Add keys in <code>.env</code> or paste a personal key below (internet required).</div>`
-                : html`
-                    <div class="stack-sm">
-                      ${slots.map(
-                        (slot, idx) => html`
-                          <div class="pool-slot-row">
-                            <div class="row-wrap">
-                              <span class="badge badge-blue">Slot #${slot.slot ?? idx + 1}</span>
-                              <strong>${String(slot.provider || 'gemini').toUpperCase()}</strong>
-                              ${slot.is_default || slot.source === 'env_default' || slot.source === 'env'
-                                ? html`<span class="badge badge-blue">.env Default</span>`
-                                : html`<span class="badge badge-emerald">Personal</span>`}
-                              ${slot.overridden_by_personal
-                                ? html`<span class="badge badge-amber">Overridden</span>`
-                                : html`
-                                    <span class="badge ${slot.status === 'ACTIVE' ? 'badge-emerald' : 'badge-amber'}">
-                                      ${slot.status || 'ACTIVE'}
-                                    </span>
-                                  `}
-                              <span class="text-xs text-muted">
-                                ${slot.requests_served ?? slot.request_count ?? 0} calls
-                              </span>
-                            </div>
-                            ${slot.is_default || slot.source === 'env_default' || slot.source === 'env'
-                              ? html`<span class="text-xs text-muted">Managed in .env</span>`
-                              : html`
-                                  <button
-                                    type="button"
-                                    class="btn btn-danger-outline btn-sm"
-                                    @click=${() => this._deletePoolKey(slot.id)}
-                                  >
-                                    Remove
-                                  </button>
-                                `}
-                          </div>
-                        `
-                      )}
-                    </div>
-                  `}
-
-              ${webLite && slots.length >= WEB_LITE_LIMITS.maxPoolKeys
-                ? html`
-                    <div class="locked-card">
-                      <div class="locked-overlay">
-                        <span class="lock-pill">🔒 Slot #2+ • Desktop App Feature</span>
+              ${(() => {
+                const pSlot = slots.find((s) => !s.is_default && s.source === 'personal');
+                return pSlot
+                  ? html`
+                      <div class="row-between" style="padding: 10px 14px; background: var(--google-blue-soft); border-radius: var(--radius-sm);">
+                        <div class="row-wrap" style="gap: 6px;">
+                          <span class="badge badge-blue">Custom Key Active</span>
+                          <span class="text-xs text-muted">(${String(pSlot.provider || 'gemini').toUpperCase()})</span>
+                        </div>
                         <button
                           type="button"
-                          class="btn btn-amber btn-sm"
-                          @click=${() => promptSystemAppDownload('unlimited_pool', 'Desktop App unlocks unlimited Gemini + Groq API rotation with automatic rate-limit cooldown.')}
+                          class="btn btn-outline btn-sm"
+                          @click=${() => this._deletePoolKey(pSlot.id)}
                         >
-                          Unlock Unlimited Pool
+                          Reset to Default
                         </button>
                       </div>
+                    `
+                  : nothing;
+              })()}
+
+              <!-- Optional Custom Assistant Settings -->
+              <details class="admin-disclosure" style="margin-top: 4px;">
+                <summary class="admin-disclosure-summary">
+                  <span>⚙️ Custom AI Assistant Key (Optional)</span>
+                  <span class="text-xs text-muted">▾</span>
+                </summary>
+                <div class="admin-disclosure-body" style="padding-top: 10px;">
+                  <form class="stack-sm" @submit=${this._addPoolKey} autocomplete="off">
+                    <div class="grid-2">
+                      <select
+                        class="select"
+                        aria-label="AI Provider"
+                        .value=${this.poolProvider}
+                        @change=${(e) => {
+                          this.poolProvider = e.target.value;
+                        }}
+                      >
+                        <option value="gemini">Google Gemini</option>
+                        <option value="groq">Groq Cloud (Fast)</option>
+                        <option value="openrouter">OpenRouter</option>
+                      </select>
+                      <input
+                        name="pool_api_key"
+                        type="password"
+                        class="input"
+                        autocomplete="new-password"
+                        placeholder="Paste custom assistant key"
+                        .value=${this.poolApiKey}
+                        @input=${(e) => {
+                          this.poolApiKey = e.target.value;
+                        }}
+                      />
                     </div>
-                  `
-                : html`
-                    <form class="stack-sm" @submit=${this._addPoolKey} autocomplete="off">
-                      <div class="grid-2">
-                        <select
-                          class="select"
-                          aria-label="Pool API Provider"
-                          .value=${this.poolProvider}
-                          @change=${(e) => {
-                            this.poolProvider = e.target.value;
-                          }}
-                        >
-                          <option value="gemini">Gemini 2.0 Flash</option>
-                          <option value="groq">Groq Fallback</option>
-                          <option value="openrouter">OpenRouter</option>
-                        </select>
-                        <input
-                          name="pool_api_key"
-                          type="password"
-                          class="input"
-                          autocomplete="new-password"
-                          placeholder="Paste API key (stays hidden)"
-                          .value=${this.poolApiKey}
-                          @input=${(e) => {
-                            this.poolApiKey = e.target.value;
-                          }}
-                        />
-                      </div>
-                      <button type="submit" class="btn btn-primary btn-sm" ?disabled=${this.poolBusy}>
-                        ${this.poolBusy ? 'Encrypting...' : '➕ Add Key to Pool'}
-                      </button>
-                    </form>
-                  `}
+                    <button type="submit" class="btn btn-primary btn-sm" ?disabled=${this.poolBusy}>
+                      ${this.poolBusy ? 'Saving...' : '💾 Save Custom Key'}
+                    </button>
+                  </form>
+                </div>
+              </details>
             </div>
           </div>
         </div>
@@ -1028,22 +985,70 @@ export class OmnilearnSourcesView extends LitElement {
   }
 
   _renderSearchPanel(webLite) {
+    const currentFilter = SEARCH_FILTERS.find((f) => f.id === this.searchFilter) || SEARCH_FILTERS[0];
     return html`
       <div class="stack-md">
-        <form class="row-wrap" @submit=${this._runSearch}>
+        <form class="row-wrap" @submit=${this._runSearch} style="gap: 8px;">
           <input
             type="search"
-            class="input"
-            style="flex: 1; min-width: 200px;"
-            placeholder="Search topics, papers, lecture PDFs, or YouTube..."
+            class="input input-pill"
+            style="flex: 1; min-width: 220px;"
+            placeholder="Search topics, research papers, lecture PDFs, or YouTube..."
             .value=${this.searchQuery}
             @input=${(e) => {
               this.searchQuery = e.target.value;
             }}
           />
-          <button type="submit" class="btn btn-primary" ?disabled=${this.searching}>
-            ${this.searching ? 'Searching...' : '🔍 Search In-App'}
-          </button>
+
+          <!-- Material 3 Split Button for Dropdown Search Action -->
+          <div class="split-button-container">
+            <button
+              type="submit"
+              class="btn btn-primary split-button-action"
+              ?disabled=${this.searching}
+            >
+              ${this.searching ? 'Searching...' : `🔍 Search ${currentFilter?.label || 'Sources'}`}
+            </button>
+            <div class="split-button-divider"></div>
+            <button
+              type="button"
+              class="btn btn-primary split-button-trigger"
+              aria-label="Filter source type"
+              aria-expanded=${this.searchDropdownOpen}
+              @click=${(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.searchDropdownOpen = !this.searchDropdownOpen;
+              }}
+            >
+              ▾
+            </button>
+
+            ${this.searchDropdownOpen
+              ? html`
+                  <div class="split-dropdown-menu">
+                    ${SEARCH_FILTERS.map((f) => {
+                      const active = this.searchFilter === f.id;
+                      return html`
+                        <button
+                          type="button"
+                          class="split-dropdown-item ${active ? 'active' : ''}"
+                          @click=${(e) => {
+                            e.stopPropagation();
+                            this._selectSearchFilter(f.id);
+                            this.searchDropdownOpen = false;
+                            if (this.searchQuery.trim()) this._runSearch();
+                          }}
+                        >
+                          <span>${f.id === 'all' ? '🌐' : f.id === 'papers' ? '📚' : f.id === 'web' ? '📄' : '▶️'}</span>
+                          <span>${f.label}</span>
+                        </button>
+                      `;
+                    })}
+                  </div>
+                `
+              : nothing}
+          </div>
         </form>
 
         <div class="pill-strip" role="group" aria-label="Search Source Filter">

@@ -141,7 +141,7 @@ export class OmnilearnExamView extends LitElement {
                 Time Allowed: ${paper.time_allowed || '60 Minutes'} • Max Marks: ${paper.max_marks || 25}
               </div>
             </div>
-            <span class="badge badge-violet">Multi-API Rubric Grader</span>
+            <span class="badge badge-violet">AI Exam Tutor</span>
           </div>
         </div>
 
