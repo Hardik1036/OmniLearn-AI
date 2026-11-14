@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+from datetime import datetime, timezone
 import html
 import io
 import ipaddress
@@ -70,11 +71,69 @@ except ImportError:
 
 GEMINI_MODEL_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent?key={api_key}"
+    "gemini-4-hydrogen:generateContent?key={api_key}"
 )
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
+
+# Workload classification:
+# gemini-4-hydrogen is the primary flagship model for heavy course synthesis and exam grading
+# (capped at 20 requests/day on the free tier).
+# gemini-3.8-flash and gemini-3.5-flash-lite act as automatic fallbacks when Hydrogen returns 429 RESOURCE_EXHAUSTED.
+HEAVY_AI_TASKS = frozenset({
+    "courses_synthesize",
+    "course_synthesize",
+    "exam_grade",
+    "exam_grading",
+    "heavy_synthesis",
+})
+
+
+def resolve_gemini_model(model_name: str) -> str:
+    """Normalize model names and apply deprecation / automatic routing rules.
+
+    gemini-2.5-flash is deprecated and will automatically route to gemini-3.5-flash-lite
+    starting December 1, 2026.
+    """
+    clean = (model_name or "").strip().lower()
+    clean = clean.removeprefix("models/")
+    if clean == "gemini-2.5-flash":
+        try:
+            now = datetime.now(timezone.utc)
+            if (now.year, now.month, now.day) >= (2026, 12, 1):
+                return "gemini-3.5-flash-lite"
+        except Exception:
+            return "gemini-3.5-flash-lite"
+        return "gemini-2.5-flash"
+    return clean
+
+
+def get_gemini_models_for_task(task: str | None = None) -> tuple[str, ...]:
+    """Select Gemini model hierarchy based on workload intensity.
+
+    Heavy tasks (synthesis & exam grading) start with gemini-4-hydrogen, with gemini-3.8-flash
+    and gemini-3.5-flash-lite as automatic fallbacks upon 429 RESOURCE_EXHAUSTED.
+    """
+    clean_task = (task or "").strip().lower()
+    if clean_task in HEAVY_AI_TASKS:
+        models = (
+            "gemini-4-hydrogen",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        )
+    else:
+        # Standard lightweight tasks (video transcription, search summaries)
+        # default to flash models to preserve the 20 req/day quota of gemini-4-hydrogen
+        models = (
+            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        )
+    return tuple(resolve_gemini_model(m) for m in models)
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _BLOCKED_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "metadata.google.internal"})
@@ -240,12 +299,14 @@ async def _invoke_provider(
     prompt: str,
     expect_json: bool = True,
     multimodal_parts: list[dict[str, Any]] | None = None,
+    task: str | None = None,
 ) -> tuple[int, str]:
     if provider == "gemini":
-        gemini_models = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro")
+        gemini_models = get_gemini_models_for_task(task)
         last_status = 503
         last_text = "Gemini service unavailable"
-        for model in gemini_models:
+        for raw_model in gemini_models:
+            model = resolve_gemini_model(raw_model)
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={quote_plus(api_key)}"
             gen_cfg: dict[str, Any] = {"temperature": 0.25}
             if expect_json:
@@ -266,7 +327,16 @@ async def _invoke_provider(
                 except Exception:
                     return 502, text
             last_status, last_text = status, text
-            if status not in (404, 503):
+
+            # Automatic Fallback Behavior:
+            # gemini-4-hydrogen is the primary model for heavy synthesis & grading (capped at 20 req/day).
+            # When Hydrogen returns 429 RESOURCE_EXHAUSTED or when an endpoint returns 404/503,
+            # automatically fail over to Gemini 3.8 Flash or Gemini 3.5 Flash-Lite.
+            is_exhausted = (status == 429) or ("RESOURCE_EXHAUSTED" in text) or ("QUOTA_EXCEEDED" in text)
+            if status in (404, 503) or is_exhausted:
+                continue
+
+            if status in (401, 403):
                 break
         return last_status, last_text
 
@@ -342,6 +412,7 @@ async def call_ai_with_pool(
                 prompt,
                 expect_json=expect_json,
                 multimodal_parts=multimodal_parts,
+                task=cache_endpoint,
             )
         except Exception:
             await mark_key_cooldown(env, key_id, cooldown_seconds=65)
