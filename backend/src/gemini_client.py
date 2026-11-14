@@ -70,7 +70,7 @@ except ImportError:
 
 GEMINI_MODEL_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-3.8-flash:generateContent?key={api_key}"
+    "gemini-2.0-flash:generateContent?key={api_key}"
 )
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -242,7 +242,7 @@ async def _invoke_provider(
     multimodal_parts: list[dict[str, Any]] | None = None,
 ) -> tuple[int, str]:
     if provider == "gemini":
-        gemini_models = ("gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash")
+        gemini_models = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro")
         last_status = 503
         last_text = "Gemini service unavailable"
         for model in gemini_models:
@@ -280,9 +280,9 @@ async def _invoke_provider(
         if provider == "openrouter":
             headers["HTTP-Referer"] = "https://omnilearn.ai"
             headers["X-Title"] = "OmniLearn AI"
-            models_to_try = ("openrouter/auto", "meta-llama/llama-3.3-70b-instruct")
+            models_to_try = ("meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-001", "openrouter/auto")
         else:
-            models_to_try = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
+            models_to_try = ("openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
 
         last_status = 503
         last_text = f"{provider} unavailable"

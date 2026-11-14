@@ -1093,13 +1093,14 @@ async def handle_request(request: Any, env: Any) -> Any:
             return make_json_response(res, status=status, headers=headers)
 
         if method == "GET" and path == "/api/auth/google/start":
+            host = get_header(request, "Host").strip()
+            proto = get_header(request, "X-Forwarded-Proto").strip()
+            if not proto:
+                parsed_req = urlparse(str(getattr(request, "url", "") or "/"))
+                proto = parsed_req.scheme or ("http" if host and ("localhost" in host or "127.0.0.1" in host) else "https")
             origin = (
                 get_header(request, "Origin").strip()
-                or (
-                    f"{get_header(request, 'X-Forwarded-Proto', 'https')}://{get_header(request, 'Host')}".strip()
-                    if get_header(request, "Host")
-                    else ""
-                )
+                or (f"{proto}://{host}".strip() if host else "")
             )
             if not origin:
                 parsed_req = urlparse(str(getattr(request, "url", "") or "/"))
@@ -1119,13 +1120,13 @@ async def handle_request(request: Any, env: Any) -> Any:
             q = parse_qs(parsed_req.query or "")
             if q.get("error"):
                 return make_response("", status=302, headers={"Location": "/?auth_error=google_cancelled"})
+            host = get_header(request, "Host").strip()
+            proto = get_header(request, "X-Forwarded-Proto").strip()
+            if not proto:
+                proto = parsed_req.scheme or ("http" if host and ("localhost" in host or "127.0.0.1" in host) else "https")
             origin = (
                 get_header(request, "Origin").strip()
-                or (
-                    f"{get_header(request, 'X-Forwarded-Proto', 'https')}://{get_header(request, 'Host')}".strip()
-                    if get_header(request, "Host")
-                    else ""
-                )
+                or (f"{proto}://{host}".strip() if host else "")
             )
             if not origin:
                 origin = f"{parsed_req.scheme}://{parsed_req.netloc}" if parsed_req.scheme and parsed_req.netloc else ""
