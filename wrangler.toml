@@ -19,15 +19,16 @@ database_name = "omnilearn-db"
 database_id = "99ffa183-d55e-4897-a585-b91766ec0db4"
 
 # Zero-egress Cloudflare R2 object storage for lecture slides and installers
-# Provision via: npx wrangler r2 bucket create omnilearn-slides
-[[r2_buckets]]
-binding = "SLIDES_BUCKET"
-bucket_name = "omnilearn-slides"
+# NOTE: Enable R2 in your Cloudflare dashboard first (Storage & Databases -> R2),
+# then run: npx wrangler r2 bucket create omnilearn-slides
+# and uncomment the block below to bind it.
+# [[r2_buckets]]
+# binding = "SLIDES_BUCKET"
+# bucket_name = "omnilearn-slides"
 
-# Provision via: npx wrangler r2 bucket create omnilearn-releases
-[[r2_buckets]]
-binding = "RELEASES_BUCKET"
-bucket_name = "omnilearn-releases"
+# [[r2_buckets]]
+# binding = "RELEASES_BUCKET"
+# bucket_name = "omnilearn-releases"
 
 # Replace id after running: npx wrangler kv namespace create APP_CACHE
 [[kv_namespaces]]
