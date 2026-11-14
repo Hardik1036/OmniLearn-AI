@@ -260,11 +260,11 @@ export class OmnilearnExamView extends LitElement {
           ? html`
               <div class="locked-card">
                 <div class="locked-overlay">
-                  <span class="lock-pill">🔒 +${lockedQuestionsCount} More Model Exam Questions &amp; AI Grader in System App</span>
+                  <span class="lock-pill">🔒 +${lockedQuestionsCount} More Model Exam Questions &amp; AI Grader in Desktop App</span>
                   <button
                     type="button"
                     class="btn btn-amber btn-sm"
-                    @click=${() => promptSystemAppDownload('full_exam', 'Web Lite displays 1 sample exam question. Download the System App for complete 3-section University Papers and AI Rubric Grading.')}
+                    @click=${() => promptSystemAppDownload('full_exam', 'Cloud Preview displays 1 sample exam question. Get the Desktop App for complete 3-section University Papers and AI Rubric Grading.')}
                   >
                     Unlock Full Exam Paper
                   </button>

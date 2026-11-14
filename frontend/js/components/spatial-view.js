@@ -62,13 +62,13 @@ export class OmnilearnSpatialView extends LitElement {
     const layoutType = course.layout_type || '2x2';
 
     return html`
-      <div class="stack-md">
+      <div class="stack-md view-enter">
         <div class="card">
           <div class="row-between">
             <div>
-              <h2>🖥️ Multi-Window &amp; Visual Frames Inspector</h2>
+              <h2>🖥️ Split-Screen Lecture &amp; Visual Slide Inspector</h2>
               <div class="text-sm text-secondary">
-                Synchronized video quadrant ROIs, PDF diagram pages, PowerPoint slides, and timestamped transcripts.
+                Synchronized lecture sections, slide diagrams, and timestamped study materials.
               </div>
             </div>
             <div class="row-wrap">
@@ -157,7 +157,7 @@ export class OmnilearnSpatialView extends LitElement {
                       ${quadrantGroups.length > 1
                         ? html`
                             <div class="stack-sm">
-                              <div class="text-xs text-muted">4-Quadrant Lectures Unified Under <strong>${subj.title}</strong></div>
+                              <div class="text-xs text-muted">Split-Screen Lecture Sections Unified Under <strong>${subj.title}</strong></div>
                               <div class="spatial-grid-2x2">
                                 ${quadrantGroups.map(
                                   (qg) => html`
@@ -213,10 +213,10 @@ export class OmnilearnSpatialView extends LitElement {
                               })}
                             </div>
                           `
-                        : html`<div class="text-xs text-muted">No slide/diagram JPEGs extracted for this quadrant yet.</div>`}
+                        : html`<div class="text-xs text-muted">No slide diagrams extracted for this section yet.</div>`}
 
                       <div>
-                        <div class="text-xs text-muted" style="margin-bottom: 4px;">Synchronized Transcript / Source Excerpts</div>
+                        <div class="text-xs text-muted" style="margin-bottom: 4px;">Synchronized Notes &amp; Transcript Excerpts</div>
                         <div class="transcript-box">
                           ${transcriptText || subj.summary || 'No transcript lines attached to this subject yet.'}
                         </div>

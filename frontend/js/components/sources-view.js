@@ -307,10 +307,10 @@ export class OmnilearnSourcesView extends LitElement {
           return;
         }
         if (TEXT_EXTS.has(ext) && file.size > WEB_LITE_LIMITS.maxTextFileBytes) {
-          this.errorMessage = `${file.name} exceeds Web Lite 500 KB limit for text/CSV previews.`;
+          this.errorMessage = `${file.name} exceeds Cloud Preview 500 KB limit for text/CSV previews.`;
           promptSystemAppDownload(
             'rich_doc_upload',
-            'Web Lite caps text/CSV uploads at 500 KB. Download the System App for unlimited file sizes.'
+            'Cloud Preview caps text/CSV uploads at 500 KB. Get the Desktop App for unlimited file sizes.'
           );
           return;
         }
@@ -358,7 +358,7 @@ export class OmnilearnSourcesView extends LitElement {
     this.videoProgress = 5;
 
     if (isLocalDesktopBackend(this.edition)) {
-      this.busyMessage = `Uploading ${file.name} for native C++ OpenCV ${this.videoLayout} slicing...`;
+      this.busyMessage = `Processing ${file.name} for split-screen lecture sections...`;
       try {
         const formData = new FormData();
         formData.append('course_id', courseId);
@@ -640,7 +640,7 @@ export class OmnilearnSourcesView extends LitElement {
             </div>
             <span class="badge ${webLite ? 'badge-amber' : 'badge-emerald'}">
               ${webLite
-                ? `🌐 ${sources.length} / ${WEB_LITE_LIMITS.maxSources} Sources (Web Lite)`
+                ? `🌐 ${sources.length} / ${WEB_LITE_LIMITS.maxSources} Sources (Cloud Preview)`
                 : `⚡ ${sources.length} / ∞ Sources (Unlocked)`}
             </span>
           </div>
@@ -789,7 +789,7 @@ export class OmnilearnSourcesView extends LitElement {
                     id="synth-target-subject"
                     type="text"
                     class="input"
-                    placeholder="e.g., Operating Systems (all 4 video quadrants merged as Lecture 1-4)"
+                    placeholder="e.g., Operating Systems (all lecture materials merged together)"
                     .value=${this.targetSubjectName}
                     @input=${(e) => {
                       this.targetSubjectName = e.target.value;
@@ -810,6 +810,27 @@ export class OmnilearnSourcesView extends LitElement {
                 </label>
               </div>
 
+              ${this.synthesizing
+                ? html`
+                    <div class="skeleton-card view-enter" style="margin-bottom: 10px;">
+                      <div class="row-between">
+                        <strong class="text-xs text-secondary">
+                          ${this.synthProgress < 40
+                            ? '📖 1/3 Reading sources & lecture slides...'
+                            : this.synthProgress < 75
+                            ? '🧠 2/3 Extracting core concepts & formulas...'
+                            : '🎨 3/3 Generating diagrams, notes & quizzes...'}
+                        </strong>
+                        <span class="text-xs text-muted">${this.synthProgress}%</span>
+                      </div>
+                      <div class="skeleton-shimmer" style="height: 6px; width: 100%;"></div>
+                      <div class="skeleton-shimmer skeleton-line title"></div>
+                      <div class="skeleton-shimmer skeleton-line"></div>
+                      <div class="skeleton-shimmer skeleton-line short"></div>
+                    </div>
+                  `
+                : nothing}
+
               <button
                 type="button"
                 class="btn btn-emerald btn-block"
@@ -817,7 +838,7 @@ export class OmnilearnSourcesView extends LitElement {
                 @click=${this._synthesizeCourse}
               >
                 ${this.synthesizing
-                  ? '⏳ Synthesizing Online via AI Pool...'
+                  ? '⏳ Generating Study Pack...'
                   : '🚀 Synthesize Subject Notes & Exam Pack (Online)'}
               </button>
             </div>
@@ -825,19 +846,19 @@ export class OmnilearnSourcesView extends LitElement {
             <!-- Multi-API Pool Manager (Zero-Leakage Anonymous Slots) -->
             <div class="card stack-md">
               <div class="row-between">
-                <h3>🔑 Multi-API Key Pool</h3>
+                <h3>🔑 AI Study Keys Pool</h3>
                 <span class="badge ${webLite ? 'badge-amber' : 'badge-emerald'}">
-                  ${webLite ? `${slots.length}/1 Slot (Web Lite)` : `${slots.length} Active Slots`}
+                  ${webLite ? `${slots.length}/1 Active Key` : `${slots.length} Active Keys`}
                 </span>
               </div>
               <div class="text-xs text-muted">
                 ${this.pool?.using_source === 'personal'
-                  ? 'Mode: Personal API Pool active (automatically overrides defaults). Keys are AES-256-GCM encrypted and never displayed.'
+                  ? 'Personal AI Keys active (stored securely and never displayed).'
                   : this.pool?.using_source === 'cloud_relay'
-                  ? 'Mode: Cloudflare Worker Default AI Relay active (no personal key required). Paste your own key below anytime to override.'
+                  ? 'Cloud AI Relay active. You can paste your own personal key below anytime to customize.'
                   : this.pool?.using_source === 'default_env'
-                  ? 'Mode: Default .env API keys active. Add your own personal key below to override defaults for your account.'
-                  : 'Keys are loaded from .env defaults or encrypted at rest (AES-256-GCM). Zero key characters are ever shown.'}
+                  ? 'Default AI Study Keys active. Add your own key below to customize for your account.'
+                  : 'Keys are securely stored and encrypted. Zero key characters are ever displayed.'}
               </div>
 
               ${Array.isArray(this.pool?.invalid_format_warnings) && this.pool.invalid_format_warnings.length > 0
@@ -899,11 +920,11 @@ export class OmnilearnSourcesView extends LitElement {
                 ? html`
                     <div class="locked-card">
                       <div class="locked-overlay">
-                        <span class="lock-pill">🔒 Slot #2+ • System App Required</span>
+                        <span class="lock-pill">🔒 Slot #2+ • Desktop App Feature</span>
                         <button
                           type="button"
                           class="btn btn-amber btn-sm"
-                          @click=${() => promptSystemAppDownload('unlimited_pool', 'System App unlocks unlimited Gemini + Groq API rotation with 65s 429 cooldown.')}
+                          @click=${() => promptSystemAppDownload('unlimited_pool', 'Desktop App unlocks unlimited Gemini + Groq API rotation with automatic rate-limit cooldown.')}
                         >
                           Unlock Unlimited Pool
                         </button>
@@ -986,7 +1007,7 @@ export class OmnilearnSourcesView extends LitElement {
         ${webLite
           ? html`
               <div class="text-xs text-muted">
-                Web Lite Search previews up to 3 OpenAlex academic paper abstracts. Web Docs, Direct PDFs &amp; YouTube search require the System App.
+                Cloud Preview Search previews up to 3 OpenAlex academic paper abstracts. Web Docs, Direct PDFs &amp; YouTube search are unlocked in the Desktop App.
               </div>
             `
           : nothing}
@@ -1143,8 +1164,8 @@ export class OmnilearnSourcesView extends LitElement {
           </div>
           <div class="text-xs text-muted">
             ${webLite
-              ? 'Web Lite supports .txt/.csv <= 500 KB and .mp4 <= 5 min preview. System App parses full PDF/XLSX/PPTX online.'
-              : 'Full System App unlocks unlimited PDF, XLSX, PPTX, CSV, TXT & OpenCV 4-quadrant video lecture slicing (internet required for AI).'}
+              ? 'Cloud Preview processes text files and video previews. Desktop App unlocks large PDFs, spreadsheets, and slides.'
+              : 'Desktop App unlocks full document parsing, large videos, and unlimited course sources.'}
           </div>
         </div>
 
@@ -1152,7 +1173,7 @@ export class OmnilearnSourcesView extends LitElement {
           ? html`
               <div class="card stack-md" style="background: var(--bg-subtle);">
                 <div class="row-between">
-                  <strong>🎬 Multi-Window Lecture Slicer: ${this.stagedVideoFile.name}</strong>
+                  <strong>🎬 Split-Screen Lecture Extractor: ${this.stagedVideoFile.name}</strong>
                   <button
                     type="button"
                     class="btn btn-outline btn-sm"
@@ -1165,16 +1186,16 @@ export class OmnilearnSourcesView extends LitElement {
                 </div>
 
                 <div class="text-xs text-secondary">
-                  All 4 quadrant windows in a 2x2 video are treated as 4 distinct lectures of ONE subject.
+                  Multi-camera and split-screen video recordings are automatically sectioned into distinct lecture parts.
                 </div>
 
                 <div class="field">
-                  <label class="field-label" for="video-subject-name">Target Subject for These Quadrant Lectures</label>
+                  <label class="field-label" for="video-subject-name">Target Subject for These Lecture Sections</label>
                   <input
                     id="video-subject-name"
                     type="text"
                     class="input"
-                    placeholder="e.g., Data Structures & Algorithms"
+                    placeholder="e.g., Data Structures &amp; Algorithms"
                     .value=${this.targetSubjectName}
                     @input=${(e) => {
                       this.targetSubjectName = e.target.value;
@@ -1184,7 +1205,7 @@ export class OmnilearnSourcesView extends LitElement {
 
                 <div class="grid-2">
                   <div class="field">
-                    <label class="field-label" for="video-layout-select">Multi-Window Layout</label>
+                    <label class="field-label" for="video-layout-select">Split-Screen Layout</label>
                     <select
                       id="video-layout-select"
                       class="select"
@@ -1193,7 +1214,7 @@ export class OmnilearnSourcesView extends LitElement {
                         this.videoLayout = e.target.value;
                       }}
                     >
-                      <option value="2x2">2x2 Grid (4 Simultaneous Windows)</option>
+                      <option value="2x2">2x2 Grid (4 Lecture Windows)</option>
                       <option value="1x2">1x2 Side-by-Side (2 Windows)</option>
                       <option value="2x1">2x1 Stacked (2 Windows)</option>
                       <option value="1x1">1x1 Single Screen</option>
@@ -1228,8 +1249,8 @@ export class OmnilearnSourcesView extends LitElement {
 
                 <button type="button" class="btn btn-primary" @click=${this._processStagedVideo}>
                   ${webLite
-                    ? '🎞️ Slice Preview Keyframes (<= 8 Slides in Canvas)'
-                    : '⚡ Process Multi-Window Video with OpenCV'}
+                    ? '🎞️ Extract Lecture Keyframes'
+                    : '⚡ Extract Split-Screen Lecture Frames'}
                 </button>
               </div>
             `
@@ -1263,7 +1284,7 @@ export class OmnilearnSourcesView extends LitElement {
           </div>
           <div class="text-xs text-muted">
             ${webLite
-              ? 'Web Lite supports 1 public webpage text preview. Direct PDFs, batch PDF crawler & YouTube require the System App.'
+              ? 'Cloud Preview supports 1 public webpage text preview. Direct PDFs, batch PDF crawler & YouTube are unlocked in the Desktop App.'
               : 'Auto-detects YouTube transcripts/chapters, direct .pdf URLs, or extracts readable webpage text + all linked PDFs.'}
           </div>
         </form>

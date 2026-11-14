@@ -130,7 +130,7 @@ export class OmnilearnNotesView extends LitElement {
     const citations = Array.isArray(subject.source_citations) ? subject.source_citations : [];
 
     return html`
-      <div class="stack-md">
+      <div class="stack-md view-enter reading-measure" style="margin: 0 auto;">
         <!-- Subject Switcher Pills (Ctrl 29) & Export Markdown (Ctrl 30) -->
         <div class="card">
           <div class="row-between">
@@ -194,7 +194,7 @@ export class OmnilearnNotesView extends LitElement {
         ${slides.length > 0
           ? html`
               <div class="card stack-sm">
-                <h3>🖼️ Visual Slides, PDF Diagrams &amp; Keyframes (${slides.length})</h3>
+                <h3>🖼️ Lecture Slides &amp; Diagrams (${slides.length})</h3>
                 <div class="slide-carousel">
                   ${slides.map((slide) => {
                     const rawPath = typeof slide === 'string' ? slide : slide.url || slide.path || '';
@@ -223,12 +223,12 @@ export class OmnilearnNotesView extends LitElement {
             ? html`<div class="text-sm text-muted">No key concepts extracted yet.</div>`
             : html`
                 <div class="grid-2">
-                  ${visibleConcepts.map((c) => {
+                  ${visibleConcepts.map((c, idx) => {
                     if (typeof c === 'string') {
-                      return html`<div class="card" style="background: var(--bg-page);">${c}</div>`;
+                      return html`<div class="card stagger-card" style="background: var(--bg-page); --stagger-index: ${idx};">${c}</div>`;
                     }
                     return html`
-                      <div class="card stack-sm" style="background: var(--bg-page);">
+                      <div class="card stack-sm stagger-card" style="background: var(--bg-page); --stagger-index: ${idx};">
                         <div class="row-between">
                           <strong>${c.title || c.name || 'Concept'}</strong>
                           ${c.citation ? html`<span class="citation-badge">${c.citation}</span>` : nothing}
@@ -246,13 +246,13 @@ export class OmnilearnNotesView extends LitElement {
             ? html`
                 <div class="locked-card">
                   <div class="locked-overlay">
-                    <span class="lock-pill">🔒 +${lockedConceptsCount} More Concepts &amp; Formulas in System App</span>
+                    <span class="lock-pill">🔒 +${lockedConceptsCount} More Concepts &amp; Formulas in Desktop App</span>
                     <button
                       type="button"
                       class="btn btn-amber btn-sm"
-                      @click=${() => promptSystemAppDownload('full_notes_concepts', 'Web Lite displays 2 sample concepts per subject. Download the System App for complete notes.')}
+                      @click=${() => promptSystemAppDownload('full_notes_concepts', 'Cloud Preview displays 2 sample concepts per subject. Get the Desktop App for complete notes.')}
                     >
-                      Download Full System App
+                      Get Desktop App
                     </button>
                   </div>
                 </div>
@@ -265,12 +265,12 @@ export class OmnilearnNotesView extends LitElement {
               <div class="card stack-md">
                 <h3>📐 Mathematical Formulas (KaTeX)</h3>
                 <div class="stack-sm">
-                  ${visibleFormulas.map((f) => {
+                  ${visibleFormulas.map((f, idx) => {
                     const label = typeof f === 'object' ? f.label || f.name || '' : '';
                     const latex = typeof f === 'string' ? f : f.latex || f.formula || '';
                     const exp = typeof f === 'object' ? f.explanation || f.note || '' : '';
                     return html`
-                      <div class="katex-block stack-sm">
+                      <div class="katex-block stack-sm stagger-card" style="--stagger-index: ${idx};">
                         ${label ? html`<strong>${label}</strong>` : nothing}
                         <div data-formula-latex=${latex}></div>
                         ${exp ? html`<div class="text-xs text-secondary">${exp}</div>` : nothing}
@@ -285,7 +285,7 @@ export class OmnilearnNotesView extends LitElement {
         ${subject.mermaid_diagram
           ? html`
               <div class="card stack-sm">
-                <h3>🔀 Concept Architecture Diagram (Mermaid Strict)</h3>
+                <h3>🔀 Interactive Concept Map</h3>
                 <div class="mermaid-container" data-mermaid-diagram=${subject.mermaid_diagram}></div>
               </div>
             `

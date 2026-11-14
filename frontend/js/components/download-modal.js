@@ -184,8 +184,8 @@ export class OmnilearnDownloadModal extends LitElement {
         <div class="modal-dialog">
           <div class="row-between">
             <div>
-              <span class="badge badge-emerald">⚡ $0.00 / Month • Native System Application</span>
-              <h2 id="download-modal-title" style="margin-top: 8px;">Download OmniLearn Full System App</h2>
+              <span class="badge badge-emerald">⚡ Fast &amp; Free • Native Desktop Application</span>
+              <h2 id="download-modal-title" style="margin-top: 8px;">Download OmniLearn Desktop App</h2>
             </div>
             <button type="button" class="btn btn-outline btn-sm" @click=${this._close} aria-label="Close download modal">
               ✕ Close
@@ -196,7 +196,7 @@ export class OmnilearnDownloadModal extends LitElement {
             ? html`
                 <div class="locked-card">
                   <div class="row-between">
-                    <span class="lock-pill">🔒 System App Required${this.feature ? ` (${this.feature})` : ''}</span>
+                    <span class="lock-pill">🔒 Desktop App Feature${this.feature ? ` (${this.feature})` : ''}</span>
                   </div>
                   <p style="margin: 0;">${this.reason}</p>
                 </div>
@@ -204,7 +204,7 @@ export class OmnilearnDownloadModal extends LitElement {
             : nothing}
 
           <div class="text-sm text-secondary">
-            Zero Electron bloat — runs natively inside OS WebView (Edge WebView2 / WKWebView / WebKitGTK / Android WebView) with local Python FastAPI, SQLite WAL + FTS5 search, C++ OpenCV multi-window video slicing, PDF/XLSX/PPTX/YouTube parsers, and unlimited Multi-API key rotation.
+            Fast, lightweight, and offline-ready. Runs directly on your device with complete privacy, instant full-text search, and large video lecture processing.
           </div>
 
           ${this.loading
@@ -254,11 +254,11 @@ export class OmnilearnDownloadModal extends LitElement {
 
           <div class="source-fallback-card" style="margin: 16px 0; padding: 14px 16px; background: rgba(30, 41, 59, 0.6); border: 1px dashed var(--border-color, #334155); border-radius: 8px;">
             <div class="row-between" style="margin-bottom: 6px;">
-              <strong style="font-size: 0.9rem;">🛠️ Run Directly from Source (Instant System Edition)</strong>
+              <strong style="font-size: 0.9rem;">🛠️ Run Directly from Source (Developer Mode)</strong>
               <span class="badge badge-emerald">Ready Now</span>
             </div>
             <p class="text-xs text-secondary" style="margin: 0 0 8px 0;">
-              If precompiled GitHub releases are still compiling or unpublished, run the complete System Edition immediately with full SQLite WAL + FTS5 search, local OpenCV video slicing, and no size limits:
+              If precompiled installer packages are still compiling on GitHub, launch the desktop app directly from source with complete offline search and no cloud size limits:
             </p>
             <pre style="margin: 0; padding: 10px 12px; background: #0b1120; border-radius: 6px; font-size: 0.8rem; overflow-x: auto; color: #38bdf8;"><code>git clone https://github.com/Hardik1036/OmniLearn-AI.git
 cd OmniLearn-AI
@@ -273,7 +273,7 @@ python -m backend.local_app.app_launcher</code></pre>
                 this.showComparison = !this.showComparison;
               }}
             >
-              ${this.showComparison ? '▲ Hide Edition Comparison' : '▼ Compare Web Lite vs Full App'}
+              ${this.showComparison ? '▲ Hide Comparison' : '▼ Compare Cloud Preview vs Desktop App'}
             </button>
 
             ${this.showComparison
@@ -283,8 +283,8 @@ python -m backend.local_app.app_launcher</code></pre>
                       <thead>
                         <tr>
                           <th>Capability</th>
-                          <th>🌐 Web Lite (Cloudflare)</th>
-                          <th>⚡ Full System App</th>
+                          <th>🌐 Cloud Preview (Web)</th>
+                          <th>⚡ Desktop App</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -300,13 +300,13 @@ python -m backend.local_app.app_launcher</code></pre>
                         </tr>
                         <tr>
                           <td><strong>Database &amp; Search</strong></td>
-                          <td>Remote D1 preview</td>
-                          <td>Local SQLite WAL + instant FTS5 full-text search (online sync supported)</td>
+                          <td>Cloud preview</td>
+                          <td>Local instant smart search across all notes, slides, and transcripts</td>
                         </tr>
                         <tr>
                           <td><strong>Multi-API Key Pool</strong></td>
                           <td>1 active key slot</td>
-                          <td>Unlimited Gemini + Groq keys with 65s 429 cooldown rotation</td>
+                          <td>Unlimited Gemini + Groq keys with 65s automatic rate-limit cooldown</td>
                         </tr>
                         <tr>
                           <td><strong>Study Aids, Grader &amp; Exports</strong></td>
@@ -321,9 +321,9 @@ python -m backend.local_app.app_launcher</code></pre>
           </div>
 
           <div class="row-between" style="padding-top: 8px; border-top: 1px solid var(--border-subtle);">
-            <span class="text-xs text-muted">Hosted via Cloudflare R2 ($0 Egress) / GitHub Releases</span>
+            <span class="text-xs text-muted">Hosted via Cloudflare R2 / GitHub Releases</span>
             <button type="button" class="btn btn-outline" @click=${this._close}>
-              🚀 Continue in Limited Web Lite
+              🚀 Continue in Cloud Preview
             </button>
           </div>
         </div>

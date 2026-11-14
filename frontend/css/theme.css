@@ -51,6 +51,27 @@
   --sidebar-width: 288px;
   --topbar-height: 64px;
   --bottom-nav-height: 64px;
+
+  /* Motion & Duration Scale */
+  --duration-instant: 80ms;     /* Button press, checkbox/toggle feedback */
+  --duration-fast: 160ms;       /* Hover states, tooltips, dropdowns */
+  --duration-normal: 260ms;     /* Tab switches, card reveals, drawer slides */
+  --duration-deliberate: 420ms; /* Modals, hero entrances, progress rings */
+
+  /* Easing Curves */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);     /* Elements entering view (fast start, soft landing) */
+  --ease-in-accel: cubic-bezier(0.4, 0, 1, 1);        /* Elements exiting view (quick departure) */
+  --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1); /* On-screen morphs & layout shifts */
+  --ease-spring-snappy: cubic-bezier(0.34, 1.56, 0.64, 1); /* Badges, quiz pass checks, mastery milestones */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 *,

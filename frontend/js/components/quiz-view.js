@@ -391,11 +391,11 @@ export class OmnilearnQuizView extends LitElement {
           ? html`
               <div class="locked-card">
                 <div class="locked-overlay">
-                  <span class="lock-pill">🔒 +${lockedCount} More Quiz Questions in System App</span>
+                  <span class="lock-pill">🔒 +${lockedCount} More Quiz Questions in Desktop App</span>
                   <button
                     type="button"
                     class="btn btn-amber btn-sm"
-                    @click=${() => promptSystemAppDownload('full_quiz', 'Web Lite previews 3 sample MCQs per subject. Download the System App for full question banks & Anki export.')}
+                    @click=${() => promptSystemAppDownload('full_quiz', 'Cloud Preview previews 3 sample MCQs per subject. Get the Desktop App for full question banks & Anki export.')}
                   >
                     Unlock Full Quiz Deck
                   </button>

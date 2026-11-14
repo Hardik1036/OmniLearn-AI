@@ -4,11 +4,13 @@ import { isWebLite, promptSystemAppDownload } from '../edition-gate.js';
 export class OmnilearnEditionBanner extends LitElement {
   static properties = {
     edition: { type: String },
+    dismissed: { type: Boolean, state: true },
   };
 
   constructor() {
     super();
     this.edition = 'web_lite';
+    this.dismissed = false;
   }
 
   createRenderRoot() {
@@ -16,29 +18,42 @@ export class OmnilearnEditionBanner extends LitElement {
   }
 
   _openDownloadModal() {
-    promptSystemAppDownload('', 'Unlock local SQLite FTS5, PDF/XLSX/PPTX parsers, Website PDF crawling, YouTube, and unlimited Multi-API rotation.');
+    promptSystemAppDownload('', 'Get the native Desktop App for offline study, instant search, large video lectures, and private local storage.');
   }
 
   render() {
-    if (!isWebLite(this.edition)) {
+    if (!isWebLite(this.edition) || this.dismissed) {
       return nothing;
     }
 
     return html`
-      <div class="edition-banner" role="region" aria-label="Web Lite Edition Notice">
+      <div class="edition-banner view-enter" role="region" aria-label="Cloud Preview Notice">
         <div class="edition-banner-text">
-          <span class="badge badge-amber">🌐 WEB LITE EDITION (Limited Preview)</span>
+          <span class="badge badge-amber">🌐 Cloud Preview</span>
           <span>
-            Local PDF/XLSX/PPTX parsing, In-App Web PDF Crawler, YouTube ingestion &amp; unlimited sources require the Downloaded System App.
+            You are exploring the web preview. For offline study, large video lectures, and instant search, get the Desktop App.
           </span>
         </div>
-        <button
-          type="button"
-          class="btn btn-amber btn-sm"
-          @click=${this._openDownloadModal}
-        >
-          ⬇️ Download Full System App (Win / Mac / APK)
-        </button>
+        <div class="row-wrap" style="gap: 8px; align-items: center;">
+          <button
+            type="button"
+            class="btn btn-amber btn-sm"
+            @click=${this._openDownloadModal}
+          >
+            ⬇️ Get Desktop App
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            style="min-height: 32px; padding: 2px 8px;"
+            aria-label="Dismiss banner"
+            @click=${() => {
+              this.dismissed = true;
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
     `;
   }

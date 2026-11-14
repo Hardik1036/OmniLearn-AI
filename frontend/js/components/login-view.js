@@ -206,170 +206,176 @@ export class OmnilearnLoginView extends LitElement {
     const webLite = isWebLite(this.edition);
 
     return html`
-      <div class="login-shell">
+      <div class="login-shell view-enter">
         <div class="login-card">
           <div class="row-between">
             <div class="row-wrap">
               <img src="/icons/icon.svg" alt="OmniLearn AI" width="44" height="44" />
               <div>
                 <h1 style="font-size: 1.35rem; margin: 0;">OmniLearn AI</h1>
-                <div class="text-sm text-muted">Multi-Source Exam Mastery Engine</div>
+                <div class="text-sm text-muted">AI-Powered Exam Preparation &amp; Study Notes</div>
               </div>
             </div>
             ${webLite
-              ? html`<span class="badge badge-amber">🌐 WEB LITE</span>`
-              : html`<span class="badge badge-emerald">⚡ SYSTEM APP</span>`}
+              ? html`<span class="badge badge-amber">🌐 Cloud Preview</span>`
+              : html`<span class="badge badge-emerald">⚡ Desktop App</span>`}
           </div>
 
           <div class="security-banner">
-            🛡️ <strong>Single-Admin Protected Lock:</strong> Previously saved API keys are encrypted
-            (AES-256-GCM / OS Keychain) and <strong>NEVER</strong> displayed or returned again.
+            🛡️ <strong>Private &amp; Secure:</strong> Your lecture materials, notes, and study progress stay encrypted on your account.
           </div>
 
           ${this.errorMessage
             ? html`<div class="alert-error" role="alert">${this.errorMessage}</div>`
             : nothing}
 
-          <form class="stack-md" @submit=${this._handleSubmit} autocomplete="off">
-            <div class="field">
-              <label class="field-label" for="admin_username">Admin User ID</label>
-              <input
-                id="admin_username"
-                name="admin_username"
-                type="text"
-                class="input"
-                required
-                autocomplete="username"
-                placeholder="Default: admin (editable in .env)"
-                .value=${this.username}
-                @input=${(e) => {
-                  this.username = e.target.value;
-                }}
-              />
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="admin_password">Admin Master Password</label>
-              <input
-                id="admin_password"
-                name="admin_password"
-                type="password"
-                class="input"
-                required
-                autocomplete="current-password"
-                placeholder=${this.initialized ? 'Enter Admin password' : 'Create Admin master password (min 6 chars)'}
-                .value=${this.password}
-                @input=${(e) => {
-                  this.password = e.target.value;
-                }}
-              />
-            </div>
-
-            ${!this.initialized
-              ? html`
-                  <div class="field">
-                    <label class="field-label" for="confirm_password">Confirm Master Password</label>
-                    <input
-                      id="confirm_password"
-                      name="confirm_password"
-                      type="password"
-                      class="input"
-                      required
-                      autocomplete="new-password"
-                      placeholder="Re-enter Admin master password"
-                      .value=${this.confirmPassword}
-                      @input=${(e) => {
-                        this.confirmPassword = e.target.value;
-                      }}
-                    />
-                  </div>
-                `
-              : nothing}
-
-            <div class="grid-2">
-              <div class="field">
-                <label class="field-label" for="api_provider">API Provider</label>
-                <select
-                  id="api_provider"
-                  class="select"
-                  .value=${this.provider}
-                  @change=${(e) => {
-                    this.provider = e.target.value;
-                  }}
-                >
-                  <option value="gemini">Google Gemini Free Tier</option>
-                  <option value="groq">Groq Cloud Fallback</option>
-                  <option value="openrouter">OpenRouter Free</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label class="field-label" for="personal_api_key">Add Personal API Key (Optional)</label>
-                <input
-                  id="personal_api_key"
-                  name="personal_api_key"
-                  type="password"
-                  class="input"
-                  autocomplete="new-password"
-                  placeholder="Paste key to append (stays hidden)"
-                  .value=${this.apiKey}
-                  @input=${(e) => {
-                    this.apiKey = e.target.value;
-                  }}
-                />
-              </div>
+          <!-- Primary Student Action: Google Sign-In -->
+          <div class="stack-sm" style="margin-top: 6px;">
+            <button
+              type="button"
+              class="btn btn-navy btn-block"
+              style="min-height: 48px; font-size: 1rem;"
+              ?disabled=${this.submitting}
+              @click=${this._startGoogleSignIn}
+            >
+              🟦 Continue with Google
+            </button>
+            <div class="text-xs text-muted" style="text-align: center;">
+              Instant sign in with your Google or school account.
             </div>
 
             ${webLite
               ? html`
-                  <div class="text-xs text-muted">
-                    Web Lite caps active pool at 1 key; System App unlocks unlimited Multi-API rotation.
-                  </div>
-                `
-              : nothing}
-
-            <button type="submit" class="btn btn-navy btn-block" ?disabled=${this.submitting}>
-              ${this.submitting
-                ? 'Verifying...'
-                : this.initialized
-                ? '🔒 Unlock Workspace (Admin)'
-                : '🔑 Initialize Admin & Enter'}
-            </button>
-          </form>
-
-          <div class="stack-sm" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
-            <button
-              type="button"
-              class="btn btn-outline btn-block"
-              ?disabled=${this.submitting}
-              @click=${this._startGoogleSignIn}
-            >
-              🟦 Continue with Google (Gmail Normal User)
-            </button>
-            <div class="text-xs text-muted" style="text-align: center;">
-              ${this.googleOauthEnabled
-                ? 'Normal users can sign in with Gmail. Uses default .env API keys unless you add a personal key.'
-                : 'To enable Gmail sign-in, set GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET in .env.'}
-            </div>
-          </div>
-
-          ${webLite
-            ? html`
-                <div class="stack-sm" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
                   <button
                     type="button"
                     class="btn btn-outline btn-block"
+                    style="margin-top: 6px;"
                     ?disabled=${this.submitting}
                     @click=${this._launchGuestLite}
                   >
-                    🧪 Launch Limited Web Lite Preview (No Admin Account Needed)
+                    🚀 Try Cloud Preview as Guest
                   </button>
+                `
+              : nothing}
+          </div>
+
+          <!-- Advanced / Admin Disclosure (Keeps login uncluttered for normal students) -->
+          <details class="admin-disclosure">
+            <summary class="admin-disclosure-summary">
+              <span>⚙️ Advanced / Admin Login</span>
+              <span class="text-xs text-muted">▾</span>
+            </summary>
+            <div class="admin-disclosure-body">
+              <form class="stack-md" @submit=${this._handleSubmit} autocomplete="off">
+                <div class="field">
+                  <label class="field-label" for="admin_username">Admin User ID</label>
+                  <input
+                    id="admin_username"
+                    name="admin_username"
+                    type="text"
+                    class="input"
+                    required
+                    autocomplete="username"
+                    placeholder="Admin username"
+                    .value=${this.username}
+                    @input=${(e) => {
+                      this.username = e.target.value;
+                    }}
+                  />
+                </div>
+
+                <div class="field">
+                  <label class="field-label" for="admin_password">Admin Master Password</label>
+                  <input
+                    id="admin_password"
+                    name="admin_password"
+                    type="password"
+                    class="input"
+                    required
+                    autocomplete="current-password"
+                    placeholder=${this.initialized ? 'Enter Admin password' : 'Create Admin password (min 6 chars)'}
+                    .value=${this.password}
+                    @input=${(e) => {
+                      this.password = e.target.value;
+                    }}
+                  />
+                </div>
+
+                ${!this.initialized
+                  ? html`
+                      <div class="field">
+                        <label class="field-label" for="confirm_password">Confirm Master Password</label>
+                        <input
+                          id="confirm_password"
+                          name="confirm_password"
+                          type="password"
+                          class="input"
+                          required
+                          autocomplete="new-password"
+                          placeholder="Re-enter Admin password"
+                          .value=${this.confirmPassword}
+                          @input=${(e) => {
+                            this.confirmPassword = e.target.value;
+                          }}
+                        />
+                      </div>
+                    `
+                  : nothing}
+
+                <div class="grid-2">
+                  <div class="field">
+                    <label class="field-label" for="api_provider">AI Provider</label>
+                    <select
+                      id="api_provider"
+                      class="select"
+                      .value=${this.provider}
+                      @change=${(e) => {
+                        this.provider = e.target.value;
+                      }}
+                    >
+                      <option value="gemini">Google Gemini</option>
+                      <option value="groq">Groq Cloud (Fast)</option>
+                      <option value="openrouter">OpenRouter</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label class="field-label" for="personal_api_key">Custom API Key (Optional)</label>
+                    <input
+                      id="personal_api_key"
+                      name="personal_api_key"
+                      type="password"
+                      class="input"
+                      autocomplete="new-password"
+                      placeholder="Paste personal key"
+                      .value=${this.apiKey}
+                      @input=${(e) => {
+                        this.apiKey = e.target.value;
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-navy btn-block btn-sm" ?disabled=${this.submitting}>
+                  ${this.submitting
+                    ? 'Verifying...'
+                    : this.initialized
+                    ? '🔒 Unlock Admin Workspace'
+                    : '🔑 Initialize Admin Account'}
+                </button>
+              </form>
+            </div>
+          </details>
+
+          ${webLite
+            ? html`
+                <div style="padding-top: 14px; text-align: center;">
                   <button
                     type="button"
-                    class="btn btn-amber btn-block"
-                    @click=${() => promptSystemAppDownload('', 'Download the native Desktop or Android System App for unlimited subjects, Multi-API rotation, and native file parsing (internet required).')}
+                    class="btn btn-amber btn-block btn-sm"
+                    @click=${() => promptSystemAppDownload('', 'Get the native Desktop App for offline study, instant search, large video lectures, and private local storage.')}
                   >
-                    ⬇️ Download Full System App (.exe / .dmg / .apk)
+                    ⬇️ Download Desktop App (Windows / Mac / Android)
                   </button>
                 </div>
               `

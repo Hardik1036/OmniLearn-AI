@@ -20,12 +20,12 @@ import './components/analytics-view.js';
 
 const TABS = [
   { id: 'sources', icon: '🔍', label: 'Sources' },
-  { id: 'spatial', icon: '🖥️', label: 'Windows' },
+  { id: 'spatial', icon: '🖥️', label: 'Visuals' },
   { id: 'notes', icon: '📚', label: 'Notes' },
-  { id: 'plan', icon: '📅', label: 'Plan' },
-  { id: 'quiz', icon: '🧠', label: 'Quiz' },
-  { id: 'exam', icon: '📑', label: 'Exam' },
-  { id: 'analytics', icon: '📊', label: 'Stats' },
+  { id: 'plan', icon: '📅', label: 'Study Plan' },
+  { id: 'quiz', icon: '🧠', label: 'Practice Quiz' },
+  { id: 'exam', icon: '📑', label: 'Mock Exam' },
+  { id: 'analytics', icon: '📊', label: 'Progress' },
 ];
 
 export class OmnilearnApp extends LitElement {
@@ -509,7 +509,7 @@ export class OmnilearnApp extends LitElement {
             : nothing}
         </div>
 
-        <!-- FTS5 Quick Course Search (Ctrl 10) -->
+        <!-- Smart Course Search (Ctrl 10) -->
         <div class="top-bar-center">
           ${webLite
             ? html`
@@ -519,8 +519,8 @@ export class OmnilearnApp extends LitElement {
                   style="justify-content: space-between;"
                   @click=${() => requireCapability(this.edition, 'fts_search')}
                 >
-                  <span>🔍 FTS5 Full-Text Search across PDFs &amp; Transcripts</span>
-                  <span class="badge badge-amber">🔒 System App</span>
+                  <span>🔍 Smart Search across Notes &amp; Transcripts</span>
+                  <span class="badge badge-amber">🔒 Desktop App</span>
                 </button>
               `
             : html`
@@ -530,7 +530,7 @@ export class OmnilearnApp extends LitElement {
                     type="search"
                     class="input"
                     style="min-height: 40px;"
-                    placeholder="FTS5 Search across PDFs, XLSX, PPTX, YT... (Ctrl+K)"
+                    placeholder="Search across notes, slides, and transcripts... (Ctrl+K)"
                     .value=${this.ftsQuery}
                     @input=${(e) => {
                       this.ftsQuery = e.target.value;
@@ -542,7 +542,7 @@ export class OmnilearnApp extends LitElement {
                   ? html`
                       <div class="fts-popover">
                         <div class="row-between" style="margin-bottom: 8px;">
-                          <strong class="text-sm">FTS5 Matches (${this.ftsResults.length})</strong>
+                          <strong class="text-sm">Search Results (${this.ftsResults.length})</strong>
                           <button
                             type="button"
                             class="btn btn-outline btn-sm"
@@ -554,9 +554,9 @@ export class OmnilearnApp extends LitElement {
                           </button>
                         </div>
                         ${this.ftsLoading
-                          ? html`<div class="text-sm text-muted">Searching local SQLite FTS5...</div>`
+                          ? html`<div class="text-sm text-muted">Searching course materials...</div>`
                           : this.ftsResults.length === 0
-                          ? html`<div class="text-sm text-muted">No matching source excerpts found.</div>`
+                          ? html`<div class="text-sm text-muted">No matching excerpts found.</div>`
                           : html`
                               <div class="stack-sm">
                                 ${this.ftsResults.map(
@@ -596,15 +596,15 @@ export class OmnilearnApp extends LitElement {
                 <button
                   type="button"
                   class="edition-badge-lite"
-                  @click=${() => promptSystemAppDownload('', 'Upgrade to the native Desktop or Android System App for unlimited subjects, sources & Multi-API rotation (internet required for AI).')}
+                  @click=${() => promptSystemAppDownload('', 'Upgrade to the native Desktop App for unlimited subjects, offline study & multi-API rotation.')}
                 >
                   <span class="pulse-dot"></span>
-                  <span>WEB LITE • Download App</span>
+                  <span>Cloud Preview • Get Desktop App</span>
                 </button>
               `
             : html`
                 <span class="edition-badge-full">
-                  ${this.isOnline ? '⚡ FULL SYSTEM APP • ONLINE CONNECTED' : '⚠️ INTERNET REQUIRED • DISCONNECTED'}
+                  ${this.isOnline ? '⚡ Desktop App • Connected' : '⚠️ Offline'}
                 </span>
               `}
           <button type="button" class="btn btn-outline btn-sm" @click=${this._handleLogout}>
@@ -820,7 +820,7 @@ export class OmnilearnApp extends LitElement {
             <div class="row-between">
               <span class="badge ${webLite ? 'badge-amber' : 'badge-emerald'}">
                 ${webLite
-                  ? `🌐 ${Math.min(1, poolCount)}/1 Slot (Web Lite)`
+                  ? `🌐 ${Math.min(1, poolCount)}/1 Slot (Cloud Preview)`
                   : `⚡ ${poolCount} Keys Active`}
               </span>
               <button
@@ -881,63 +881,81 @@ export class OmnilearnApp extends LitElement {
 
           ${this.activeTab === 'sources'
             ? html`
-                <omnilearn-sources
-                  .edition=${this.edition}
-                  .courseData=${this.courseData}
-                  .pool=${this.pool}
-                  .targetDays=${this.targetDays}
-                  .dailyHours=${this.dailyHours}
-                ></omnilearn-sources>
+                <div class="view-enter">
+                  <omnilearn-sources
+                    .edition=${this.edition}
+                    .courseData=${this.courseData}
+                    .pool=${this.pool}
+                    .targetDays=${this.targetDays}
+                    .dailyHours=${this.dailyHours}
+                  ></omnilearn-sources>
+                </div>
               `
             : nothing}
 
           ${this.activeTab === 'spatial'
-            ? html`<omnilearn-spatial .courseData=${this.courseData}></omnilearn-spatial>`
+            ? html`
+                <div class="view-enter">
+                  <omnilearn-spatial .courseData=${this.courseData}></omnilearn-spatial>
+                </div>
+              `
             : nothing}
 
           ${this.activeTab === 'notes'
             ? html`
-                <omnilearn-notes
-                  .edition=${this.edition}
-                  .courseData=${this.courseData}
-                  .activeSubjectId=${this.activeSubjectId}
-                ></omnilearn-notes>
+                <div class="view-enter">
+                  <omnilearn-notes
+                    .edition=${this.edition}
+                    .courseData=${this.courseData}
+                    .activeSubjectId=${this.activeSubjectId}
+                  ></omnilearn-notes>
+                </div>
               `
             : nothing}
 
           ${this.activeTab === 'plan'
             ? html`
-                <omnilearn-plan
-                  .courseData=${this.courseData}
-                  .activeSubjectId=${this.activeSubjectId}
-                  .targetDays=${this.targetDays}
-                  .dailyHours=${this.dailyHours}
-                ></omnilearn-plan>
+                <div class="view-enter">
+                  <omnilearn-plan
+                    .courseData=${this.courseData}
+                    .activeSubjectId=${this.activeSubjectId}
+                    .targetDays=${this.targetDays}
+                    .dailyHours=${this.dailyHours}
+                  ></omnilearn-plan>
+                </div>
               `
             : nothing}
 
           ${this.activeTab === 'quiz'
             ? html`
-                <omnilearn-quiz
-                  .edition=${this.edition}
-                  .courseData=${this.courseData}
-                  .activeSubjectId=${this.activeSubjectId}
-                ></omnilearn-quiz>
+                <div class="view-enter">
+                  <omnilearn-quiz
+                    .edition=${this.edition}
+                    .courseData=${this.courseData}
+                    .activeSubjectId=${this.activeSubjectId}
+                  ></omnilearn-quiz>
+                </div>
               `
             : nothing}
 
           ${this.activeTab === 'exam'
             ? html`
-                <omnilearn-exam
-                  .edition=${this.edition}
-                  .courseData=${this.courseData}
-                  .activeSubjectId=${this.activeSubjectId}
-                ></omnilearn-exam>
+                <div class="view-enter">
+                  <omnilearn-exam
+                    .edition=${this.edition}
+                    .courseData=${this.courseData}
+                    .activeSubjectId=${this.activeSubjectId}
+                  ></omnilearn-exam>
+                </div>
               `
             : nothing}
 
           ${this.activeTab === 'analytics'
-            ? html`<omnilearn-analytics .courseData=${this.courseData}></omnilearn-analytics>`
+            ? html`
+                <div class="view-enter">
+                  <omnilearn-analytics .courseData=${this.courseData}></omnilearn-analytics>
+                </div>
+              `
             : nothing}
         </main>
       </div>
