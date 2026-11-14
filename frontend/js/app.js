@@ -17,6 +17,7 @@ import './components/plan-view.js';
 import './components/quiz-view.js';
 import './components/exam-view.js';
 import './components/analytics-view.js';
+import './components/tutor-chat.js';
 
 const TABS = [
   { id: 'sources', icon: '🔍', label: 'Sources' },
@@ -143,6 +144,10 @@ export class OmnilearnApp extends LitElement {
     super.connectedCallback();
 
     apiClient.bootstrap();
+    this._onSwitchTab = (e) => {
+      if (e.detail?.tabId) this._selectTab(e.detail.tabId);
+    };
+    window.addEventListener('omnilearn:switch-tab', this._onSwitchTab);
     window.addEventListener('omnilearn:edition-limit', this._onOpenDownload);
     window.addEventListener('omnilearn:open-download-modal', this._onOpenDownload);
     window.addEventListener('omnilearn:auth-expired', this._onAuthExpired);
@@ -155,6 +160,7 @@ export class OmnilearnApp extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener('omnilearn:switch-tab', this._onSwitchTab);
     window.removeEventListener('omnilearn:edition-limit', this._onOpenDownload);
     window.removeEventListener('omnilearn:open-download-modal', this._onOpenDownload);
     window.removeEventListener('omnilearn:auth-expired', this._onAuthExpired);
@@ -990,6 +996,16 @@ export class OmnilearnApp extends LitElement {
           `
         )}
       </nav>
+
+      <!-- AI Study Tutor & Application Assistant Chatbot -->
+      ${this.authenticated
+        ? html`
+            <omnilearn-tutor-chat
+              .courseData=${this.courseData}
+              .activeSubjectId=${this.activeSubjectId}
+            ></omnilearn-tutor-chat>
+          `
+        : nothing}
     `;
   }
 }

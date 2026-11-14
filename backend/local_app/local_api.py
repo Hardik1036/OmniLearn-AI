@@ -30,6 +30,8 @@ from backend.local_app.env_config import (
 )
 from backend.local_app.gemini_local import (
     AIServiceRequiredError,
+    build_tutor_chat_prompt,
+    call_ai_pool,
     grade_exam_answer,
     synthesize_course_sources,
     transcribe_media,
@@ -873,6 +875,72 @@ def create_app(
             return _err(exc.status_code, exc.error_code, exc.message)
         except KeyError as exc:
             return _err(404, "NOT_FOUND", str(exc))
+
+    @app.post("/api/tutor/chat")
+    async def api_tutor_chat(request: Request) -> Response:
+        db = get_db()
+        auth = require_admin(request, db)
+        if isinstance(auth, JSONResponse):
+            return auth
+
+        try:
+            body = await request.json()
+        except Exception:
+            return _err(400, "INVALID_JSON", "Request body must be valid JSON.")
+
+        message = str(body.get("message") or "").strip()
+        if not message:
+            return _err(400, "EMPTY_MESSAGE", "Message cannot be empty.")
+
+        course_id = str(body.get("course_id") or "").strip()
+        subject_id = str(body.get("subject_id") or "").strip()
+        history = body.get("history") if isinstance(body.get("history"), list) else []
+
+        course_context = ""
+        if course_id:
+            c = db.get_course(course_id)
+            if c:
+                course_context += f"Course Title: {c.get('title')}\n"
+                subjs = c.get("subjects") or []
+                if subjs:
+                    course_context += "Subjects in this course:\n"
+                    for s in subjs:
+                        course_context += f"- {s.get('title')}: {str(s.get('summary') or '')[:180]}\n"
+                if subject_id:
+                    for s in subjs:
+                        if s.get("id") == subject_id:
+                            kc = s.get("key_concepts") or []
+                            if kc:
+                                course_context += "Current Subject Key Concepts:\n" + "\n".join(f"* {item.get('name')}: {item.get('description', '')}" for item in kc[:8] if isinstance(item, dict)) + "\n"
+                            mf = s.get("math_formulas") or []
+                            if mf:
+                                course_context += "Current Subject Formulas:\n" + "\n".join(f"* {item.get('title')}: {item.get('latex')}" for item in mf[:6] if isinstance(item, dict)) + "\n"
+                            break
+
+        prompt = build_tutor_chat_prompt(message, course_context, history)
+        try:
+            res = await call_ai_pool(
+                db,
+                prompt=prompt,
+                expect_json=False,
+                cache_endpoint="tutor_chat",
+                owner_sub=str(auth.get("sub") or ""),
+            )
+        except Exception as exc:
+            return _err(503, "AI_UNAVAILABLE", f"AI Tutor is temporarily unavailable: {exc}")
+
+        if not res or not res.get("ok"):
+            return _err(503, "AI_UNAVAILABLE", "AI Tutor is temporarily unavailable. Please check your API key in Settings.")
+
+        reply_text = str(res.get("data", {}).get("text") or "I am here to help you study! What concept or app feature would you like to explore?")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "reply": reply_text.strip(),
+                "provider": res.get("provider", "gemini"),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Sources: Search, Inspect-URL (PDF Harvester), Ingest, FTS5 Search

@@ -349,6 +349,13 @@ export const apiClient = {
     });
   },
 
+  chatWithTutor({ message, course_id = '', subject_id = '', history = [] }) {
+    return apiRequest('/api/tutor/chat', {
+      method: 'POST',
+      body: { message, course_id, subject_id, history },
+    });
+  },
+
   searchSources({ query, filter = 'all', course_id = '' }) {
     return apiRequest('/api/sources/search', {
       method: 'POST',

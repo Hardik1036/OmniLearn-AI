@@ -46,6 +46,7 @@ try:
     )
     from .gemini_client import (
         AIServiceRequiredError,
+        build_tutor_chat_prompt,
         call_ai_with_pool,
         fetch_public_webpage_preview,
         http_request,
@@ -91,6 +92,7 @@ except ImportError:
     )
     from gemini_client import (
         AIServiceRequiredError,
+        build_tutor_chat_prompt,
         call_ai_with_pool,
         fetch_public_webpage_preview,
         http_request,
@@ -1409,6 +1411,64 @@ async def handle_request(request: Any, env: Any) -> Any:
                     "subjects": [persisted],
                     "used_fallback": synth["used_fallback"],
                     "cached": synth["cached"],
+                }
+            )
+
+        # AI Study Tutor & Application Assistant Chat
+        if method == "POST" and path == "/api/tutor/chat":
+            body = await _read_json_body(request)
+            message = str(body.get("message") or "").strip()
+            if not message:
+                return _bad_request("Message cannot be empty.")
+
+            course_id = str(body.get("course_id") or "").strip()
+            subject_id = str(body.get("subject_id") or "").strip()
+            history = body.get("history") if isinstance(body.get("history"), list) else []
+
+            course_context = ""
+            if course_id:
+                course = await d1_first(env, "SELECT title FROM courses WHERE id = ?", (course_id,))
+                if course:
+                    course_context += f"Active Course: {course.get('title')}\n"
+                    subjs = await d1_all(env, "SELECT id, title, summary FROM subjects WHERE course_id = ?", (course_id,))
+                    if subjs:
+                        course_context += "Course Subjects:\n"
+                        for s in subjs:
+                            course_context += f"- {s.get('title')}: {str(s.get('summary') or '')[:180]}\n"
+                    if subject_id:
+                        s_detail = await d1_first(env, "SELECT key_concepts, math_formulas FROM subject_details WHERE subject_id = ?", (subject_id,))
+                        if s_detail:
+                            kc = _safe_json_loads(s_detail.get("key_concepts"), [])
+                            if kc:
+                                course_context += "Current Subject Key Concepts:\n" + "\n".join(f"* {c.get('name')}: {c.get('description', '')}" for c in kc[:8] if isinstance(c, dict)) + "\n"
+                            mf = _safe_json_loads(s_detail.get("math_formulas"), [])
+                            if mf:
+                                course_context += "Current Subject Formulas:\n" + "\n".join(f"* {f.get('title')}: {f.get('latex')}" for f in mf[:6] if isinstance(f, dict)) + "\n"
+
+            prompt = build_tutor_chat_prompt(message, course_context, history)
+            res = await call_ai_with_pool(
+                env,
+                prompt=prompt,
+                expect_json=False,
+                cache_endpoint="tutor_chat",
+                owner_sub=owner_sub,
+            )
+            if not res or not res.get("ok"):
+                return make_json_response(
+                    {
+                        "ok": False,
+                        "error": "AI_UNAVAILABLE",
+                        "message": "AI Tutor is temporarily busy. Please ensure your internet connection or API keys are active.",
+                    },
+                    status=503,
+                )
+
+            reply_text = str(res.get("data", {}).get("text") or "I am here to help you study! What concept or app feature would you like to explore?")
+            return make_json_response(
+                {
+                    "ok": True,
+                    "reply": reply_text.strip(),
+                    "provider": res.get("provider", "gemini"),
                 }
             )
 
