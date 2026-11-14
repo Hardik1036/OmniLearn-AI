@@ -870,6 +870,9 @@ class LocalDatabase:
                         "api_key": plaintext,
                     }
                 )
+        candidates.sort(
+            key=lambda c: 1 if (c.get("provider") == "gemini" and not str(c.get("api_key") or "").startswith("AIza")) else 0
+        )
         return candidates
 
     def mark_key_used(self, key_id: str) -> None:

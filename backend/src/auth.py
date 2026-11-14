@@ -403,7 +403,13 @@ async def _worker_http_json(
     if _HAS_JS_FETCH and _js is not None and _to_js is not None:
         opts: dict[str, Any] = {"method": method.upper()}
         if headers:
-            opts["headers"] = headers
+            if hasattr(_js, "Headers"):
+                h = _js.Headers.new()
+                for k, v in headers.items():
+                    h.set(str(k), str(v))
+                opts["headers"] = h
+            else:
+                opts["headers"] = headers
         if body is not None:
             opts["body"] = body
         dict_converter = getattr(_js.Object, "fromEntries", None)

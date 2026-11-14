@@ -53,6 +53,7 @@ try:
         search_openalex_lite,
         strip_unsafe_html,
         synthesize_course,
+        transcribe_media,
         validate_public_http_url,
     )
     from .storage import build_slide_key, count_course_slides, fetch_slide, sanitize_r2_key, upload_slide
@@ -97,6 +98,7 @@ except ImportError:
         search_openalex_lite,
         strip_unsafe_html,
         synthesize_course,
+        transcribe_media,
         validate_public_http_url,
     )
     from storage import build_slide_key, count_course_slides, fetch_slide, sanitize_r2_key, upload_slide
@@ -1438,6 +1440,32 @@ async def handle_request(request: Any, env: Any) -> Any:
                 }
             )
 
+        # Transcribe Media (Audio / Video Keyframes)
+        if method == "POST" and path == "/api/sources/transcribe":
+            body = await _read_json_body(request)
+            audio_base64 = str(body.get("audio_base64") or "").strip()
+            audio_mime = str(body.get("audio_mime") or "audio/wav").strip()
+            keyframes = body.get("keyframes") if isinstance(body.get("keyframes"), list) else []
+            source_title = str(body.get("title") or body.get("source_title") or "Lecture Video").strip()
+            course_title = str(body.get("course_title") or "").strip()
+
+            try:
+                res = await transcribe_media(
+                    env,
+                    course_title=course_title,
+                    audio_base64=audio_base64,
+                    audio_mime=audio_mime,
+                    keyframes=keyframes,
+                    source_title=source_title,
+                    owner_sub=owner_sub,
+                )
+                return make_json_response(res)
+            except AIServiceRequiredError as exc:
+                return make_json_response(
+                    {"ok": False, "error": exc.error_code, "message": exc.message},
+                    status=exc.status_code,
+                )
+
         # Ingest File
         if method == "POST" and path == "/api/sources/ingest-file":
             fields, files = await _read_multipart_or_json(request)
@@ -1492,6 +1520,36 @@ async def handle_request(request: Any, env: Any) -> Any:
             if fields.get("source_type"):
                 parsed_src["source_type"] = str(fields["source_type"]).strip()
 
+            # Extract visual assets from fields or parse manifest excerpt
+            extracted_assets = []
+            if fields.get("visual_assets"):
+                try:
+                    va = json.loads(fields["visual_assets"]) if isinstance(fields["visual_assets"], str) else fields["visual_assets"]
+                    if isinstance(va, list):
+                        extracted_assets.extend(va)
+                except Exception:
+                    pass
+            if not extracted_assets and parsed_src.get("raw_text_excerpt"):
+                for line in parsed_src["raw_text_excerpt"].splitlines():
+                    match = re.match(r"^-\s*\[([a-zA-Z0-9_-]+)\s*@\s*([0-9]+[smh]?)\]\s*(\S+)", line.strip())
+                    if match:
+                        qkey, ts, url = match.groups()
+                        extracted_assets.append({
+                            "url": url,
+                            "quadrant_key": qkey,
+                            "timestamp": ts,
+                            "label": f"{qkey} @ {ts}",
+                            "caption": f"Extracted visual frame at {ts}",
+                        })
+                    else:
+                        for s_url in re.findall(r"(/api/slides/courses/[A-Za-z0-9_./-]+)", line):
+                            if not any(a.get("url") == s_url for a in extracted_assets):
+                                extracted_assets.append({
+                                    "url": s_url,
+                                    "label": "Extracted Keyframe",
+                                    "caption": "Video visual frame",
+                                })
+
             existing = await d1_first(
                 env,
                 "SELECT * FROM course_sources WHERE course_id = ? AND file_hash = ?",
@@ -1509,7 +1567,7 @@ async def handle_request(request: Any, env: Any) -> Any:
                 INSERT INTO course_sources
                     (id, course_id, source_type, title, origin_url, search_query, file_hash, storage_key,
                      raw_text_excerpt, structured_chunks_json, visual_assets_json, discovered_links_json, metadata_json, status)
-                VALUES (?, ?, ?, ?, '', '', ?, '', ?, ?, '[]', '[]', ?, 'PARSED')
+                VALUES (?, ?, ?, ?, '', '', ?, '', ?, ?, ?, '[]', ?, 'PARSED')
                 """,
                 (
                     src_id,
@@ -1519,6 +1577,7 @@ async def handle_request(request: Any, env: Any) -> Any:
                     parsed_src["file_hash"],
                     parsed_src["raw_text_excerpt"],
                     json.dumps(parsed_src["structured_chunks"], ensure_ascii=False),
+                    json.dumps(extracted_assets, ensure_ascii=False),
                     json.dumps(parsed_src["metadata"], ensure_ascii=False),
                 ),
             )
@@ -1529,7 +1588,7 @@ async def handle_request(request: Any, env: Any) -> Any:
             )
             saved = await d1_first(env, "SELECT * FROM course_sources WHERE id = ?", (src_id,))
             return make_json_response(
-                {"ok": True, "deduplicated": False, "source": _format_source_row(saved or {"id": src_id, "course_id": course_id, **parsed_src})},
+                {"ok": True, "deduplicated": False, "source": _format_source_row(saved or {"id": src_id, "course_id": course_id, "visual_assets": extracted_assets, **parsed_src})},
                 status=201,
             )
 

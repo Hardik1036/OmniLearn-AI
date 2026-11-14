@@ -385,6 +385,13 @@ export const apiClient = {
     });
   },
 
+  transcribeMedia(payload) {
+    return apiRequest('/api/sources/transcribe', {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
   getSlideUrl(slidePath) {
     if (!slidePath || typeof slidePath !== 'string') {
       return '';

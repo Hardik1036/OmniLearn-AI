@@ -1,6 +1,6 @@
-/* OmniLearn AI — Reusable Single-<canvas> Multi-Window Video Keyframe Slicer */
+/* OmniLearn AI — Reusable Single-<canvas> Multi-Window Video Keyframe Slicer & Audio Transcriber */
 
-import { ApiError } from './api-client.js';
+import { ApiError, apiClient } from './api-client.js';
 
 export function getLayoutRois(layoutType = '2x2') {
   switch (layoutType) {
@@ -99,6 +99,115 @@ function canvasToJpegBlob(canvas, quality = 0.84) {
       quality
     );
   });
+}
+
+export function audioBufferToWav(buffer, optSampleRate = 16000) {
+  const inRate = buffer.sampleRate;
+  const inLength = buffer.length;
+  const inData = buffer.getChannelData(0);
+  const secondChannel = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : null;
+
+  const outRate = Math.min(optSampleRate, inRate);
+  const ratio = inRate / outRate;
+  const outLength = Math.floor(inLength / ratio);
+  const pcm16 = new Int16Array(outLength);
+
+  for (let i = 0; i < outLength; i++) {
+    const srcIdx = Math.floor(i * ratio);
+    let sample = inData[srcIdx] || 0;
+    if (secondChannel) {
+      sample = (sample + (secondChannel[srcIdx] || 0)) * 0.5;
+    }
+    const clamped = Math.max(-1, Math.min(1, sample));
+    pcm16[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+  }
+
+  const wavBytes = new ArrayBuffer(44 + pcm16.length * 2);
+  const view = new DataView(wavBytes);
+
+  function writeString(offset, str) {
+    for (let j = 0; j < str.length; j++) {
+      view.setUint8(offset + j, str.charCodeAt(j));
+    }
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + pcm16.length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, outRate, true);
+  view.setUint32(28, outRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, pcm16.length * 2, true);
+
+  for (let k = 0; k < pcm16.length; k++) {
+    view.setInt16(44 + k * 2, pcm16[k], true);
+  }
+
+  return new Blob([wavBytes], { type: 'audio/wav' });
+}
+
+export function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = reader.result || '';
+      const base64 = typeof res === 'string' && res.includes(',') ? res.split(',')[1] : res;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function extractAudioFromVideo(file, maxDurationSec = 300) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx || !file) return null;
+
+  try {
+    const audioCtx = new AudioCtx();
+    const maxBytes = Math.min(file.size, 35 * 1024 * 1024);
+    const slice = file.slice(0, maxBytes);
+    const arrayBuffer = await slice.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const wavBlob = audioBufferToWav(audioBuffer, 16000);
+    const base64 = await blobToBase64(wavBlob);
+    await audioCtx.close();
+    return {
+      wavBlob,
+      base64,
+      durationSec: audioBuffer.duration,
+    };
+  } catch (err) {
+    console.warn('Audio extraction bypassed (no audio track or unsupported codec):', err);
+    return null;
+  }
+}
+
+export async function transcribeVideo(file, keyframes = [], options = {}) {
+  const { title = '', courseTitle = '' } = options;
+  const audioData = await extractAudioFromVideo(file);
+
+  const payload = {
+    title: title || file?.name || 'Lecture Video',
+    course_title: courseTitle,
+    audio_base64: audioData?.base64 || '',
+    audio_mime: 'audio/wav',
+    keyframes: (keyframes || []).map((k) => ({
+      roi_key: k.roi_key,
+      label: k.roi_name || k.label || k.filename,
+      timestamp: `${k.timestamp_sec || 0}s`,
+      timestamp_sec: k.timestamp_sec || 0,
+      url: k.url || '',
+    })),
+  };
+
+  return await apiClient.transcribeMedia(payload);
 }
 
 /**

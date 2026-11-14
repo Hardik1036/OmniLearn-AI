@@ -8,7 +8,7 @@ import {
   requireCapability,
   safeHttpUrl,
 } from '../edition-gate.js';
-import { extractVideoKeyframes } from '../video-extractor.js';
+import { extractVideoKeyframes, transcribeVideo } from '../video-extractor.js';
 
 const SEARCH_FILTERS = [
   { id: 'all', label: 'All' },
@@ -408,6 +408,31 @@ export class OmnilearnSourcesView extends LitElement {
         }
       }
 
+      this.busyMessage = `Transcribing lecture audio & slides with AI...`;
+      this.videoProgress = 80;
+      let videoTranscripts = [];
+      try {
+        const trRes = await transcribeVideo(file, extracted.slides, {
+          title: file.name,
+          courseTitle: this.courseData?.course?.title || '',
+        });
+        if (trRes && Array.isArray(trRes.transcripts)) {
+          videoTranscripts = trRes.transcripts;
+        }
+      } catch (trErr) {
+        console.warn('AI video transcription warning (using keyframe fallback):', trErr);
+      }
+      this.videoProgress = 95;
+
+      const visualAssets = extracted.slides.map((s, i) => ({
+        url: uploadedSlideUrls[i] || s.filename,
+        quadrant_key: s.roi_key,
+        label: s.roi_name || `${s.roi_key} @ ${s.timestamp_sec}s`,
+        timestamp: `${s.timestamp_sec}s`,
+        timestamp_sec: s.timestamp_sec,
+        caption: `Lecture Visual (${s.roi_key}) at ${s.timestamp_sec}s`,
+      }));
+
       const manifestLines = [
         `Video: ${file.name}`,
         `Layout: ${extracted.layoutType} | Duration: ${Math.round(extracted.duration)}s | Resolution: ${extracted.resolution}`,
@@ -417,6 +442,13 @@ export class OmnilearnSourcesView extends LitElement {
           (s, i) => `- [${s.roi_key} @ ${s.timestamp_sec}s] ${uploadedSlideUrls[i] || s.filename}`
         ),
       ];
+      if (videoTranscripts.length > 0) {
+        manifestLines.push(`\nSynchronized Lecture Transcripts:`);
+        for (const t of videoTranscripts) {
+          manifestLines.push(`- [${t.timestamp || '00:00'}] ${t.speaker || 'Instructor'}: ${t.text || ''}`);
+        }
+      }
+
       const manifestBlob = new File([manifestLines.join('\n')], `${file.name}.txt`, {
         type: 'text/plain',
       });
@@ -427,11 +459,12 @@ export class OmnilearnSourcesView extends LitElement {
       formData.append('layout_type', this.videoLayout);
       formData.append('taskbar_crop', String(this.taskbarCropPx));
       formData.append('subject_name', (this.targetSubjectName || '').trim());
+      formData.append('visual_assets', JSON.stringify(visualAssets));
       formData.append('file', manifestBlob, `${file.name}.txt`);
       await apiClient.ingestFile(formData);
 
       this.stagedVideoFile = null;
-      this._notifyUpdated(`Extracted ${extracted.slides.length} keyframes from "${file.name}".`);
+      this._notifyUpdated(`Extracted ${extracted.slides.length} keyframes & synchronized transcripts from "${file.name}".`);
     } catch (err) {
       this.errorMessage = err?.message || 'Browser video extraction failed.';
     } finally {
@@ -557,10 +590,34 @@ export class OmnilearnSourcesView extends LitElement {
     }, 650);
 
     try {
-      const sourceIds = this._getSources().map((s) => s.id).filter(Boolean);
+      const sources = this._getSources();
+      const sourceIds = sources.map((s) => s.id).filter(Boolean);
+      const allSlides = [];
+      const allTranscripts = [];
+
+      for (const s of sources) {
+        const assets = Array.isArray(s.visual_assets) ? s.visual_assets : [];
+        for (const a of assets) {
+          const u = typeof a === 'string' ? a : a.url || a.path;
+          if (u && !allSlides.some((item) => (typeof item === 'string' ? item : item.url) === u)) {
+            allSlides.push(typeof a === 'object' ? a : { url: u, caption: s.title || 'Slide' });
+          }
+        }
+        if (s.raw_text_excerpt) {
+          for (const line of s.raw_text_excerpt.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('- [') && (trimmed.includes(']: ') || trimmed.includes('@'))) {
+              allTranscripts.push(trimmed.replace(/^- /, ''));
+            }
+          }
+        }
+      }
+
       await apiClient.synthesizeCourse({
         course_id: courseId,
         source_ids: sourceIds,
+        slides: allSlides,
+        transcripts: allTranscripts,
         target_days: this.targetDays,
         daily_hours: this.dailyHours,
         target_subject_name: (this.targetSubjectName || '').trim(),

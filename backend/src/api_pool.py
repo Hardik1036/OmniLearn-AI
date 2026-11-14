@@ -420,6 +420,11 @@ async def get_candidate_keys(
                 }
             )
 
+    # Prioritize keys with valid format (e.g. real AIza keys, Groq gsk_, OpenRouter sk-or-)
+    # over keys that fail format validation (such as AQ. OAuth tokens pasted as Gemini API keys).
+    candidates.sort(
+        key=lambda c: 1 if (c.get("provider") == "gemini" and not str(c.get("api_key") or "").startswith("AIza")) else 0
+    )
     return candidates
 
 

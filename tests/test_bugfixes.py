@@ -251,3 +251,41 @@ async def test_get_latest_releases_uses_correct_repo_urls():
             assert rel["source_fallback_command"] == "python -m backend.local_app.app_launcher"
     finally:
         worker_env.DB.close()
+
+
+# ============================================================================
+# (F) LaTeX JSON Sanitization & Mermaid Formatting
+# ============================================================================
+
+def test_extract_json_object_handles_unescaped_latex():
+    from backend.src.gemini_client import _extract_json_object
+    raw_ai_output = '{"title": "Test", "math_formulas": [{"name": "Sigma", "latex": "\\sigma = \\sqrt{\\frac{1}{N}}"}]}'
+    parsed = _extract_json_object(raw_ai_output)
+    assert parsed is not None
+    assert parsed["title"] == "Test"
+    assert "math_formulas" in parsed
+
+
+def test_sanitize_mermaid_fixes_unquoted_parentheses():
+    from backend.src.gemini_client import sanitize_mermaid
+    raw_diagram = "flowchart TD\n  A[Start (Init)] --> B[Process (Calc)]"
+    sanitized = sanitize_mermaid(raw_diagram)
+    assert 'A["Start (Init)"]' in sanitized
+    assert 'B["Process (Calc)"]' in sanitized
+
+
+@pytest.mark.asyncio
+async def test_candidate_keys_prioritizes_valid_formats():
+    from backend.src.api_pool import get_candidate_keys
+    worker_env = build_worker_env()
+    worker_env.GEMINI_API_KEY = "AQ.INVALID_OAUTH_TOKEN"
+    worker_env.GROQ_API_KEY = "gsk_valid_groq_key_12345"
+    try:
+        candidates = await get_candidate_keys(worker_env)
+        assert len(candidates) >= 2
+        # Groq key (valid format) must be prioritized over malformed AQ. key
+        assert candidates[0]["provider"] == "groq"
+        assert candidates[-1]["provider"] == "gemini"
+    finally:
+        worker_env.DB.close()
+

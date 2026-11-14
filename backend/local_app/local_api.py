@@ -32,6 +32,7 @@ from backend.local_app.gemini_local import (
     AIServiceRequiredError,
     grade_exam_answer,
     synthesize_course_sources,
+    transcribe_media,
 )
 from backend.local_app.google_auth import (
     GoogleAuthError,
@@ -922,6 +923,32 @@ def create_app(
                 "discovered_pdfs": inspected["discovered_pdfs"],
             }
         )
+
+    @app.post("/api/sources/transcribe")
+    async def api_sources_transcribe(request: Request) -> Response:
+        db = get_db()
+        auth = require_admin(request, db)
+        if isinstance(auth, JSONResponse):
+            return auth
+        body = await request.json()
+        audio_base64 = str(body.get("audio_base64") or "").strip()
+        audio_mime = str(body.get("audio_mime") or "audio/wav").strip()
+        keyframes = body.get("keyframes") if isinstance(body.get("keyframes"), list) else []
+        source_title = str(body.get("title") or body.get("source_title") or "Lecture Video").strip()
+        course_title = str(body.get("course_title") or "").strip()
+        try:
+            res = await transcribe_media(
+                db,
+                course_title=course_title,
+                audio_base64=audio_base64,
+                audio_mime=audio_mime,
+                keyframes=keyframes,
+                source_title=source_title,
+                owner_sub=str(auth.get("sub") or ""),
+            )
+            return JSONResponse(content=res)
+        except AIServiceRequiredError as exc:
+            return _err(exc.status_code, exc.error_code, exc.message)
 
     @app.post("/api/sources/ingest-file")
     async def api_sources_ingest_file(

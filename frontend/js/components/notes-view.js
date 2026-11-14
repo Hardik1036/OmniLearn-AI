@@ -12,6 +12,7 @@ export class OmnilearnNotesView extends LitElement {
     edition: { type: String },
     courseData: { type: Object },
     activeSubjectId: { type: String },
+    activeSlideModal: { type: Object, state: true },
   };
 
   constructor() {
@@ -19,10 +20,20 @@ export class OmnilearnNotesView extends LitElement {
     this.edition = 'web_lite';
     this.courseData = { course: null, rois: [], subjects: [], sources: [] };
     this.activeSubjectId = '';
+    this.activeSlideModal = null;
   }
 
   createRenderRoot() {
     return this;
+  }
+
+  _openSlideModal(slide) {
+    if (!slide) return;
+    this.activeSlideModal = typeof slide === 'string' ? { url: slide } : slide;
+  }
+
+  _closeSlideModal() {
+    this.activeSlideModal = null;
   }
 
   _selectSubject(subjectId) {
@@ -202,7 +213,15 @@ export class OmnilearnNotesView extends LitElement {
                     const caption = typeof slide === 'object' ? slide.caption || slide.label || '' : '';
                     const citation = typeof slide === 'object' ? slide.citation || '' : '';
                     return html`
-                      <div class="slide-card">
+                      <div
+                        class="slide-card"
+                        style="cursor: pointer;"
+                        @click=${() => this._openSlideModal({
+                          url: rawPath,
+                          caption: caption || subject.title,
+                          citation,
+                        })}
+                      >
                         ${src ? html`<img src=${src} alt=${caption || subject.title} loading="lazy" />` : nothing}
                         <div class="slide-card-body">
                           ${citation ? html`<span class="citation-badge">${citation}</span>` : nothing}
@@ -227,6 +246,8 @@ export class OmnilearnNotesView extends LitElement {
                     if (typeof c === 'string') {
                       return html`<div class="card stagger-card" style="background: var(--bg-page); --stagger-index: ${idx};">${c}</div>`;
                     }
+                    const conceptSlideUrl = c.slide_url || '';
+                    const conceptSlideSrc = conceptSlideUrl ? apiClient.getSlideUrl(conceptSlideUrl) : '';
                     return html`
                       <div class="card stack-sm stagger-card" style="background: var(--bg-page); --stagger-index: ${idx};">
                         <div class="row-between">
@@ -236,6 +257,32 @@ export class OmnilearnNotesView extends LitElement {
                         <div class="text-sm text-secondary">
                           ${c.explanation || c.description || c.detail || ''}
                         </div>
+                        ${conceptSlideSrc
+                          ? html`
+                              <div
+                                class="concept-slide-preview"
+                                style="margin-top: 8px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-subtle); background: var(--bg-surface); cursor: pointer;"
+                                @click=${() =>
+                                  this._openSlideModal({
+                                    url: conceptSlideUrl,
+                                    caption: c.slide_caption || c.title,
+                                    timestamp: c.slide_timestamp,
+                                    citation: c.citation,
+                                  })}
+                              >
+                                <img
+                                  src=${conceptSlideSrc}
+                                  alt=${c.slide_caption || c.title}
+                                  loading="lazy"
+                                  style="width: 100%; max-height: 140px; object-fit: cover; display: block;"
+                                />
+                                <div class="row-between text-xs" style="padding: 4px 8px; background: rgba(15, 23, 42, 0.7); color: var(--text-secondary);">
+                                  <span>📸 ${c.slide_caption || 'Lecture Slide Visual'}</span>
+                                  ${c.slide_timestamp ? html`<span class="badge badge-sm">⏱️ ${c.slide_timestamp}</span>` : nothing}
+                                </div>
+                              </div>
+                            `
+                          : nothing}
                       </div>
                     `;
                   })}
@@ -287,6 +334,45 @@ export class OmnilearnNotesView extends LitElement {
               <div class="card stack-sm">
                 <h3>🔀 Interactive Concept Map</h3>
                 <div class="mermaid-container" data-mermaid-diagram=${subject.mermaid_diagram}></div>
+              </div>
+            `
+          : nothing}
+
+        <!-- Visual Slide Zoom Lightbox Modal -->
+        ${this.activeSlideModal
+          ? html`
+              <div class="lightbox-backdrop" @click=${this._closeSlideModal}>
+                <div class="lightbox-modal card" @click=${(e) => e.stopPropagation()}>
+                  <div class="row-between" style="margin-bottom: 12px;">
+                    <div>
+                      <h3 style="margin: 0;">${this.activeSlideModal.caption || 'Lecture Slide Visual'}</h3>
+                      <div class="text-xs text-secondary" style="margin-top: 4px;">
+                        ${this.activeSlideModal.citation || ''} ${this.activeSlideModal.timestamp ? `• ⏱️ ${this.activeSlideModal.timestamp}` : ''}
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" @click=${this._closeSlideModal}>
+                      ✕ Close
+                    </button>
+                  </div>
+                  <div class="lightbox-frame">
+                    <img
+                      src=${apiClient.getSlideUrl(this.activeSlideModal.url)}
+                      alt=${this.activeSlideModal.caption || 'Lecture Visual Frame'}
+                      class="lightbox-img"
+                    />
+                  </div>
+                  <div class="row-between" style="margin-top: 10px;">
+                    <span class="text-xs text-muted">Captured from synchronized video lecture stream</span>
+                    <a
+                      href=${apiClient.getSlideUrl(this.activeSlideModal.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="btn btn-outline btn-sm"
+                    >
+                      ↗️ Open High-Res Frame
+                    </a>
+                  </div>
+                </div>
               </div>
             `
           : nothing}

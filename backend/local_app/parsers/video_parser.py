@@ -232,7 +232,8 @@ def parse_video(
                         "lecture_label": lecture_label,
                         "label": f"{lecture_label} ({ts_str})",
                         "timestamp": ts_str,
-                        "text": f"Captured visual slide #{slide_num} in {lecture_label} at {ts_str}.",
+                        "timestamp_sec": round(ts_sec, 2),
+                        "text": f"Lecture visual frame #{slide_num} from {lecture_label} at {ts_str}. Visual asset: {fname}",
                         "citation": citation,
                     }
                 )

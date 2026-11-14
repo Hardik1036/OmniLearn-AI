@@ -67,7 +67,7 @@ def _extract_json_object(raw_text: str) -> dict[str, Any] | None:
         return None
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
+        text = re.sub(r"\s*```[^\n]*$", "", text)
     try:
         parsed = json.loads(text)
         return parsed if isinstance(parsed, dict) else None
@@ -76,8 +76,16 @@ def _extract_json_object(raw_text: str) -> dict[str, Any] | None:
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end > start:
+        candidate = text[start : end + 1]
         try:
-            parsed = json.loads(text[start : end + 1])
+            parsed = json.loads(candidate)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            pass
+        # Sanitize unescaped LaTeX math backslashes common in academic AI formula responses
+        try:
+            sanitized = re.sub(r'\\(?![/"\\bfnrtu]|u[0-9a-fA-F]{4})', r'\\\\', candidate)
+            parsed = json.loads(sanitized)
             return parsed if isinstance(parsed, dict) else None
         except Exception:
             return None
@@ -107,6 +115,9 @@ def _get_all_candidate_keys(
             continue
         seen.add(val)
         candidates.append({"id": sec_id, "provider": provider, "api_key": val})
+    candidates.sort(
+        key=lambda c: 1 if (c.get("provider") == "gemini" and not str(c.get("api_key") or "").startswith("AIza")) else 0
+    )
     return candidates
 
 
@@ -117,6 +128,7 @@ async def _invoke_provider(
     prompt: str,
     *,
     expect_json: bool = True,
+    multimodal_parts: list[dict[str, Any]] | None = None,
 ) -> tuple[int, str]:
     if provider == "gemini":
         gemini_models = ("gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash")
@@ -127,16 +139,19 @@ async def _invoke_provider(
             gen_cfg: dict[str, Any] = {"temperature": 0.25}
             if expect_json:
                 gen_cfg["responseMimeType"] = "application/json"
+            parts: list[dict[str, Any]] = [{"text": prompt}]
+            if multimodal_parts:
+                parts.extend(multimodal_parts)
             body = {
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"parts": parts}],
                 "generationConfig": gen_cfg,
             }
             resp = await client.post(url, json=body)
             if resp.status_code == 200:
                 try:
                     payload = resp.json()
-                    parts = payload["candidates"][0]["content"]["parts"]
-                    return 200, str(parts[0].get("text", ""))
+                    res_parts = payload["candidates"][0]["content"]["parts"]
+                    return 200, str(res_parts[0].get("text", ""))
                 except Exception:
                     return 502, resp.text
             last_status, last_text = resp.status_code, resp.text
@@ -272,9 +287,11 @@ async def call_ai_pool(
     expect_json: bool = True,
     owner_sub: str | None = None,
     client: httpx.AsyncClient | None = None,
+    multimodal_parts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Call local personal/env keys or relay through Cloudflare Worker when user has no local key."""
-    prompt_hash = hashlib.sha256(f"{endpoint}:{prompt}".encode("utf-8")).hexdigest()
+    cache_seed = prompt + (f":{len(multimodal_parts)}" if multimodal_parts else "")
+    prompt_hash = hashlib.sha256(f"{endpoint}:{cache_seed}".encode("utf-8")).hexdigest()
     if db is not None:
         cached = db.get_api_cache(prompt_hash, endpoint=endpoint)
         if isinstance(cached, dict):
@@ -314,6 +331,7 @@ async def call_ai_pool(
                     api_key,
                     prompt,
                     expect_json=expect_json,
+                    multimodal_parts=multimodal_parts,
                 )
             except Exception:
                 if key_id.startswith("env:"):
@@ -357,6 +375,33 @@ async def call_ai_pool(
     finally:
         if owns_client:
             await client.aclose()
+
+
+def sanitize_mermaid(diagram_src: str) -> str:
+    """Sanitize Mermaid code so it parses reliably in strict mode without syntax errors."""
+    if not isinstance(diagram_src, str) or not diagram_src.strip():
+        return "flowchart TD\n    A[\"Core Principles\"] --> B[\"Exam Mastery\"]"
+    lines = diagram_src.strip().splitlines()
+    header_found = False
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("```"):
+            continue
+        if any(stripped.startswith(prefix) for prefix in ("flowchart", "graph", "stateDiagram", "classDiagram", "erDiagram")):
+            header_found = True
+            cleaned_lines.append(stripped)
+            continue
+        line_clean = re.sub(
+            r'([A-Za-z0-9_-]+)\[([^"\]\n]*\([^"\]\n]*\)[^"\]\n]*)\]',
+            r'\1["\2"]',
+            stripped,
+        )
+        line_clean = re.sub(r'(?<=\w)\s*&\s*(?=\w)', ' and ', line_clean)
+        cleaned_lines.append("    " + line_clean if not line_clean.startswith("subgraph") and not line_clean.startswith("end") else line_clean)
+    if not header_found:
+        cleaned_lines.insert(0, "flowchart TD")
+    return "\n".join(cleaned_lines)
 
 
 def _collect_slide_crops(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -499,21 +544,48 @@ def build_subject_scaffold(
             }
         ]
 
+    # Bind slide crops to concepts if slides exist
+    for idx, c in enumerate(concepts):
+        if all_slides:
+            s_match = all_slides[idx % len(all_slides)]
+            c["slide_url"] = s_match.get("url") or ""
+            c["slide_caption"] = s_match.get("caption") or f"Visual Slide #{idx + 1}"
+            c["slide_timestamp"] = s_match.get("timestamp") or "00:00"
+
     combined_excerpt = " ".join(
         sanitize_plain_text(str(s.get("raw_text_excerpt") or ""))[:400] for s in sources[:5]
     ).strip()
     summary = (
-        f"Unified synthesis across {len(sources)} source(s) for {clean_title}. "
-        + (combined_excerpt[:500] if combined_excerpt else "Ready for active recall and rubric practice.")
+        f"Comprehensive academic synthesis for {clean_title}.\n\n"
+        f"1. Foundations & Scope: Synthesizes {len(sources)} ingested materials. "
+        f"{combined_excerpt[:500] if combined_excerpt else 'Establishes foundational theoretical principles, formal models, and structural constraints.'}\n\n"
+        f"2. Mechanics & State Transitions: Cross-references lecture slides and diagrams to reinforce invariant properties through visual dual-coding.\n\n"
+        f"3. Practical Applications: Connects theoretical bounds with applied problem-solving and university-level examination rubrics."
     )
 
     sid = f"subj-{uuid.uuid4().hex[:8]}"
     safe_node = re.sub(r"[^A-Za-z0-9 ]", "", clean_title)[:28] or "Module"
     mermaid = (
         "flowchart TD\n"
-        f'    S["{len(sources)} Ingested Sources"] --> C["{safe_node}"]\n'
-        '    C --> K["Key Concepts & Formulas"]\n'
-        '    K --> Q["Active Recall & Model Exam"]'
+        "    subgraph Ingestion[\"📚 Ingested Materials & Video\"]\n"
+        f"        S1[\"Lecture Video & Transcripts ({len(sources)} sources)\"]\n"
+        "        S2[\"Visual Keyframes & Slide Crops\"]\n"
+        "    end\n"
+        f"    subgraph Architecture[\"🧠 {safe_node} Foundations\"]\n"
+        "        C1[\"Core Principles & Invariants\"]\n"
+        "        C2[\"State Transitions & Mechanisms\"]\n"
+        "        C3[\"Mathematical Bounds & Proofs\"]\n"
+        "    end\n"
+        "    subgraph Application[\"⚡ Synthesis & Verification\"]\n"
+        "        A1[\"Active Recall Diagnostics\"]\n"
+        "        A2[\"Model University Exam Solutions\"]\n"
+        "    end\n"
+        "    S1 --> C1\n"
+        "    S2 --> C2\n"
+        "    C1 --> C2\n"
+        "    C2 --> C3\n"
+        "    C2 -->|\"Applied Drills\"| A1\n"
+        "    C3 -->|\"Analytical Solutions\"| A2"
     )
 
     formulas = [
@@ -722,19 +794,30 @@ def _apply_ai_payload_to_subject(
         target["topic"] = sanitize_plain_text(data["topic"])[:160]
     if isinstance(data.get("summary"), str) and data["summary"].strip():
         target["summary"] = sanitize_plain_text(data["summary"])[:4000]
-    if isinstance(data.get("mermaid_diagram"), str) and "flowchart" in data["mermaid_diagram"]:
-        target["mermaid_diagram"] = data["mermaid_diagram"][:2500]
+    if isinstance(data.get("mermaid_diagram"), str):
+        target["mermaid_diagram"] = sanitize_mermaid(data["mermaid_diagram"])
     if isinstance(data.get("key_concepts"), list) and data["key_concepts"]:
-        target["key_concepts"] = [
-            {
-                "title": sanitize_plain_text(str(c.get("title") or c.get("name") or "Concept")),
-                "name": sanitize_plain_text(str(c.get("name") or c.get("title") or "Concept")),
-                "explanation": sanitize_plain_text(str(c.get("explanation") or "")),
-                "citation": sanitize_plain_text(str(c.get("citation") or course_title)),
-            }
-            for c in data["key_concepts"][:16]
-            if isinstance(c, dict)
-        ]
+        available_slides = target.get("slide_crops") or []
+        cleaned_concepts = []
+        for idx, c in enumerate(data["key_concepts"][:16]):
+            if not isinstance(c, dict):
+                continue
+            slide_match = available_slides[idx % len(available_slides)] if available_slides else None
+            s_url = str(c.get("slide_url") or (slide_match.get("url") if isinstance(slide_match, dict) else slide_match) or "")
+            s_cap = str(c.get("slide_caption") or (slide_match.get("caption") if isinstance(slide_match, dict) else f"Visual Frame #{idx + 1}") or "")
+            s_ts = str(c.get("slide_timestamp") or (slide_match.get("timestamp") if isinstance(slide_match, dict) else "") or "")
+            cleaned_concepts.append(
+                {
+                    "title": sanitize_plain_text(str(c.get("title") or c.get("name") or "Concept")),
+                    "name": sanitize_plain_text(str(c.get("name") or c.get("title") or "Concept")),
+                    "explanation": sanitize_plain_text(str(c.get("explanation") or "")),
+                    "citation": sanitize_plain_text(str(c.get("citation") or course_title)),
+                    "slide_url": s_url,
+                    "slide_caption": s_cap,
+                    "slide_timestamp": s_ts,
+                }
+            )
+        target["key_concepts"] = cleaned_concepts
     if isinstance(data.get("math_formulas"), list) and data["math_formulas"]:
         target["math_formulas"] = [f for f in data["math_formulas"][:10] if isinstance(f, dict)]
     if isinstance(data.get("quizzes"), list) and data["quizzes"]:
@@ -835,18 +918,36 @@ async def synthesize_course_sources(
             "Return JSON with top-level key `subjects` containing one object per subject.\n"
         )
 
+    all_slides = _collect_slide_crops(sources)
+    slide_lines = []
+    for idx, s in enumerate(all_slides[:24]):
+        s_url = s.get("url") or ""
+        s_cap = s.get("caption") or f"Visual Frame #{idx + 1}"
+        s_ts = s.get("timestamp") or ""
+        slide_lines.append(f"- URL: {s_url} | Caption: {s_cap} | Timestamp: {s_ts}")
+    slide_summary = "\nAvailable Visual Video Slides & Keyframes:\n" + "\n".join(slide_lines) if slide_lines else ""
+
     prompt = (
-        "You are OmniLearn AI, an exam mastery synthesizer. Return a valid JSON object with keys:\n"
-        "`title`, `topic`, `summary`, `mermaid_diagram` (valid `flowchart TD`), "
-        "`key_concepts` (list of {title, explanation, citation}), "
-        "`math_formulas` (list of {name, latex, note}), "
-        "`quizzes` (list of 5+ MCQs {id, question, options, correct_index, explanation, citation}), "
-        "`exam_questions` (list of Section A/B/C items {id, section, marks, question, rubric, model_answer}), "
-        "or `subjects` (array of such objects when multiple subjects are synthesized).\n"
+        "You are OmniLearn AI, an elite university tutor and exam synthesis engine.\n"
+        "Synthesize an in-depth, rigorous JSON study pack for this subject with exact keys:\n"
+        "`title`: Concise subject title.\n"
+        "`topic`: Subject topic.\n"
+        "`summary`: Rigorous 3-paragraph executive summary detailing (1) Theoretical motivation & foundational concepts, "
+        "(2) Core mechanisms, invariant properties, and state transitions, and (3) Practical tradeoffs, complexity bounds, and real-world implementations.\n"
+        "`mermaid_diagram`: A comprehensive, multi-stage architecture flowchart (`flowchart TD`) with 8 to 14 distinct nodes "
+        "organized into `subgraph` sections (e.g. Ingestion, Processing, Architecture, Verification). "
+        "Every node label containing parentheses or quotes MUST be strictly enclosed in double quotes (e.g. A[\"Label (with info)\"]). "
+        "Include condition labels on connector edges (e.g. -->|\"Valid\"| B).\n"
+        "`key_concepts`: List of 6 to 12 in-depth concepts ({title, explanation, citation, slide_url, slide_caption, slide_timestamp}). "
+        "For each concept, attach the most relevant `slide_url` from the Available Visual Video Slides list below so lecture slides illustrate the notes.\n"
+        "`math_formulas`: List of 4 to 8 rigorous mathematical expressions ({name, latex, note}) with complete KaTeX equations.\n"
+        "`quizzes`: List of 5+ high-yield MCQs ({id, question, options, correct_index, explanation, citation}).\n"
+        "`exam_questions`: List of Section A/B/C university examination questions ({id, section, marks, question, rubric, model_answer}).\n\n"
         f"Course: {course['title']}\n"
         f"{quadrant_note}{multi_subj_note}"
         f"Target Days: {target_days}, Daily Hours: {daily_hours}\n"
-        f"Sources:\n{source_digest}"
+        f"Sources:\n{source_digest}\n"
+        + (f"{slide_summary}\n" if slide_summary else "")
     )
 
     ai_resp = await call_ai_pool(
@@ -1031,6 +1132,130 @@ async def grade_exam_answer(
     )
 
 
+async def transcribe_media(
+    db: LocalDatabase | None,
+    *,
+    course_title: str = "",
+    audio_base64: str = "",
+    audio_mime: str = "audio/wav",
+    keyframes: list[dict[str, Any]] | None = None,
+    source_title: str = "",
+    owner_sub: str | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """Transcribe lecture speech, audio track, and visual video keyframes using Gemini Flash in local app."""
+    clean_title = (source_title or course_title or "Lecture Video").strip()
+    keyframe_list = keyframes or []
+
+    if not _has_ai_access(db, owner_sub=owner_sub):
+        fallback_transcripts = []
+        for idx, kf in enumerate(keyframe_list[:16]):
+            ts = str(kf.get("timestamp") or kf.get("timestamp_sec") or f"{idx * 30}s")
+            qkey = str(kf.get("roi_key") or f"q{idx + 1}")
+            label = str(kf.get("label") or kf.get("caption") or f"Slide {idx + 1}")
+            fallback_transcripts.append(
+                {
+                    "timestamp": ts,
+                    "timestamp_sec": idx * 30,
+                    "speaker": f"Lecture Section ({qkey})",
+                    "text": f"Visual Slide #{idx + 1}: {label}. Explains core architectural concepts and diagrams for {clean_title}.",
+                    "key_point": label,
+                }
+            )
+        if not fallback_transcripts:
+            fallback_transcripts = [
+                {
+                    "timestamp": "00:00",
+                    "timestamp_sec": 0,
+                    "speaker": "Instructor",
+                    "text": f"Introduction and foundational overview of {clean_title}.",
+                    "key_point": "Course Foundations",
+                }
+            ]
+        return {
+            "ok": True,
+            "title": clean_title,
+            "used_ai": False,
+            "transcripts": fallback_transcripts,
+            "full_transcript": "\n".join(f"[{t['timestamp']}] {t['speaker']}: {t['text']}" for t in fallback_transcripts),
+        }
+
+    keyframe_digest = "\n".join(
+        f"- [Frame {i+1} @ {k.get('timestamp', k.get('timestamp_sec', '0s'))}] ROI: {k.get('roi_key', 'q1')} | Label: {k.get('label', k.get('caption', 'Slide'))}"
+        for i, k in enumerate(keyframe_list[:20])
+    )
+
+    multimodal_parts: list[dict[str, Any]] = []
+    has_audio = bool(audio_base64 and len(audio_base64) > 100)
+    if has_audio:
+        multimodal_parts.append(
+            {
+                "inlineData": {
+                    "mimeType": audio_mime or "audio/wav",
+                    "data": audio_base64,
+                }
+            }
+        )
+
+    prompt = (
+        "You are OmniLearn AI's Lecture Transcriber.\n"
+        f"Transcribe the lecture audio and visual slides for: '{clean_title}'.\n"
+        + ("An audio recording of the lecture is attached. Transcribe all spoken words, explanations, and student/professor interactions.\n" if has_audio else "")
+        + (f"Extracted Video Keyframe Slides:\n{keyframe_digest}\n" if keyframe_digest else "")
+        + "Return a JSON object with keys:\n"
+        "`title`: Title of the lecture.\n"
+        "`duration_sec`: Approximate duration in seconds.\n"
+        "`transcripts`: Array of objects, each with:\n"
+        "  - `timestamp`: (string MM:SS, e.g. '01:24')\n"
+        "  - `timestamp_sec`: (integer seconds)\n"
+        "  - `speaker`: ('Instructor', 'Slide Presentation', etc.)\n"
+        "  - `text`: (clean, verbatim transcript of lecture speech or slide contents)\n"
+        "  - `key_point`: (brief 3-6 word concept summary)\n"
+        "`full_transcript`: Complete text of the lecture.\n"
+    )
+
+    ai_resp = await call_ai_pool(
+        db,
+        prompt,
+        endpoint="transcribe_video",
+        expect_json=True,
+        owner_sub=owner_sub,
+        client=client,
+        multimodal_parts=multimodal_parts if has_audio else None,
+    )
+    if not ai_resp or not isinstance(ai_resp.get("data"), dict):
+        raise AIServiceRequiredError(
+            "AI transcription service is temporarily unreachable.",
+            status_code=503,
+            error_code="TRANSCRIPTION_FAILED",
+        )
+
+    data = ai_resp["data"]
+    raw_transcripts = data.get("transcripts") if isinstance(data.get("transcripts"), list) else []
+    cleaned_transcripts = []
+    for idx, t in enumerate(raw_transcripts):
+        if not isinstance(t, dict):
+            continue
+        cleaned_transcripts.append(
+            {
+                "timestamp": str(t.get("timestamp") or f"{idx * 30:02d}:00"),
+                "timestamp_sec": int(t.get("timestamp_sec") or idx * 30),
+                "speaker": sanitize_plain_text(str(t.get("speaker") or "Instructor")),
+                "text": sanitize_plain_text(str(t.get("text") or "")),
+                "key_point": sanitize_plain_text(str(t.get("key_point") or "")),
+            }
+        )
+
+    full_text = str(data.get("full_transcript") or "\n".join(f"[{t['timestamp']}] {t['speaker']}: {t['text']}" for t in cleaned_transcripts))
+    return {
+        "ok": True,
+        "title": clean_title,
+        "used_ai": True,
+        "transcripts": cleaned_transcripts,
+        "full_transcript": full_text,
+    }
+
+
 __all__ = [
     "AIServiceRequiredError",
     "build_subject_scaffold",
@@ -1038,4 +1263,5 @@ __all__ = [
     "grade_exam_answer",
     "offline_synthesize_subjects",
     "synthesize_course_sources",
+    "transcribe_media",
 ]

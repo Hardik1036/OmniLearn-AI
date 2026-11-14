@@ -4,15 +4,26 @@ import { apiClient } from '../api-client.js';
 export class OmnilearnSpatialView extends LitElement {
   static properties = {
     courseData: { type: Object },
+    activeSlideModal: { type: Object, state: true },
   };
 
   constructor() {
     super();
     this.courseData = { course: null, rois: [], subjects: [], sources: [] };
+    this.activeSlideModal = null;
   }
 
   createRenderRoot() {
     return this;
+  }
+
+  _openSlideModal(slide) {
+    if (!slide) return;
+    this.activeSlideModal = typeof slide === 'string' ? { url: slide } : slide;
+  }
+
+  _closeSlideModal() {
+    this.activeSlideModal = null;
   }
 
   _gridClass(layoutType, count = 0) {
@@ -173,7 +184,15 @@ export class OmnilearnSpatialView extends LitElement {
                                           const caption = typeof slide === 'object' ? slide.caption || slide.label || '' : '';
                                           const cite = typeof slide === 'object' ? slide.citation || '' : '';
                                           return html`
-                                            <div class="slide-card">
+                                            <div
+                                              class="slide-card"
+                                              style="cursor: pointer;"
+                                              @click=${() => this._openSlideModal({
+                                                url: rawPath,
+                                                caption: caption || qg.label,
+                                                citation: cite,
+                                              })}
+                                            >
                                               ${slideSrc
                                                 ? html`<img src=${slideSrc} alt=${caption || qg.label} loading="lazy" />`
                                                 : nothing}
@@ -200,7 +219,15 @@ export class OmnilearnSpatialView extends LitElement {
                                 const caption = typeof slide === 'object' ? slide.caption || slide.label || '' : '';
                                 const cite = typeof slide === 'object' ? slide.citation || '' : '';
                                 return html`
-                                  <div class="slide-card">
+                                  <div
+                                    class="slide-card"
+                                    style="cursor: pointer;"
+                                    @click=${() => this._openSlideModal({
+                                      url: rawPath,
+                                      caption: caption || subj.title,
+                                      citation: cite,
+                                    })}
+                                  >
                                     ${slideSrc
                                       ? html`<img src=${slideSrc} alt=${caption || subj.title} loading="lazy" />`
                                       : nothing}
@@ -226,6 +253,45 @@ export class OmnilearnSpatialView extends LitElement {
                 })}
               </div>
             `}
+
+        <!-- Lightbox Zoom Modal for Split-Screen Visuals -->
+        ${this.activeSlideModal
+          ? html`
+              <div class="lightbox-backdrop" @click=${this._closeSlideModal}>
+                <div class="lightbox-modal card" @click=${(e) => e.stopPropagation()}>
+                  <div class="row-between" style="margin-bottom: 12px;">
+                    <div>
+                      <h3 style="margin: 0;">${this.activeSlideModal.caption || 'Split-Screen Lecture Visual'}</h3>
+                      <div class="text-xs text-secondary" style="margin-top: 4px;">
+                        ${this.activeSlideModal.citation || ''} ${this.activeSlideModal.timestamp ? `• ⏱️ ${this.activeSlideModal.timestamp}` : ''}
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" @click=${this._closeSlideModal}>
+                      ✕ Close
+                    </button>
+                  </div>
+                  <div class="lightbox-frame">
+                    <img
+                      src=${apiClient.getSlideUrl(this.activeSlideModal.url)}
+                      alt=${this.activeSlideModal.caption || 'Lecture Visual Frame'}
+                      class="lightbox-img"
+                    />
+                  </div>
+                  <div class="row-between" style="margin-top: 10px;">
+                    <span class="text-xs text-muted">Captured from synchronized split-screen lecture video</span>
+                    <a
+                      href=${apiClient.getSlideUrl(this.activeSlideModal.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="btn btn-outline btn-sm"
+                    >
+                      ↗️ Open High-Res Frame
+                    </a>
+                  </div>
+                </div>
+              </div>
+            `
+          : nothing}
       </div>
     `;
   }
