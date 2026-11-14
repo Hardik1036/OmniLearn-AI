@@ -143,6 +143,7 @@ async def get_session(request: Any, env: Any) -> dict[str, Any] | None:
     role = claims.get("role")
     if role not in ("admin", "user", "guest_lite"):
         return None
+    claims["token"] = token
     return claims
 
 
@@ -577,6 +578,23 @@ async def login_with_google(
     }
 
 
+def resolve_effective_redirect_uri(cfg_uri: str, fallback_callback_url: str) -> str:
+    clean_cfg = (cfg_uri or "").strip()
+    clean_fallback = (fallback_callback_url or "").strip()
+    if clean_cfg and clean_cfg.startswith(("http://", "https://")):
+        if clean_fallback and clean_fallback.startswith(("http://", "https://")):
+            try:
+                from urllib.parse import urlparse
+                cfg_netloc = urlparse(clean_cfg).netloc
+                fb_netloc = urlparse(clean_fallback).netloc
+                if cfg_netloc != fb_netloc and ("localhost" in cfg_netloc or "127.0.0.1" in cfg_netloc):
+                    return clean_fallback
+            except Exception:
+                pass
+        return clean_cfg
+    return clean_fallback
+
+
 async def build_google_oauth_start_url(env: Any, fallback_callback_url: str) -> tuple[bool, str, str]:
     """Return `(ok, auth_url_or_error, error_code)` for Authorization Code redirect."""
     cfg = get_google_oauth_config(env)
@@ -588,7 +606,7 @@ async def build_google_oauth_start_url(env: Any, fallback_callback_url: str) -> 
             "Google browser redirect login requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
             "GOOGLE_OAUTH_NOT_CONFIGURED",
         )
-    redirect_uri = str(cfg["redirect_uri"] or "").strip() or fallback_callback_url
+    redirect_uri = resolve_effective_redirect_uri(str(cfg.get("redirect_uri") or ""), fallback_callback_url)
     state = await jwt_sign(
         {"purpose": "google_oauth_state", "redirect_uri": redirect_uri, "nonce": uuid.uuid4().hex[:16]},
         get_master_secret(env),
@@ -612,7 +630,7 @@ async def complete_google_oauth_callback(
     cfg = get_google_oauth_config(env)
     client_id = str(cfg["client_id"] or "")
     client_secret = str(cfg["client_secret"] or "")
-    redirect_uri = str(state_claims.get("redirect_uri") or cfg["redirect_uri"] or fallback_callback_url).strip()
+    redirect_uri = str(state_claims.get("redirect_uri") or resolve_effective_redirect_uri(str(cfg.get("redirect_uri") or ""), fallback_callback_url)).strip()
     if not client_id or not client_secret:
         return {"ok": False, "status": 503, "error": "GOOGLE_OAUTH_NOT_CONFIGURED", "message": "Google OAuth secrets not configured."}
 

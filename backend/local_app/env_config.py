@@ -146,6 +146,33 @@ def get_configured_env_api_keys() -> list[tuple[str, str, str]]:
     return found
 
 
+def validate_gemini_key_format(key: str) -> tuple[bool, str | None]:
+    """Check if a Gemini API key matches standard format (`AIza...`).
+    Returns `(is_valid, warning_message)`.
+    Never returns any plaintext characters of the key itself.
+    """
+    clean = (key or "").strip()
+    if not clean:
+        return True, None
+    if not clean.startswith("AIza"):
+        if clean.startswith("AQ.") or clean.startswith("ya29."):
+            return False, "Gemini key appears to be a Google OAuth/access token, not an AI Studio API key starting with 'AIza'."
+        return False, "Gemini API key should start with 'AIza' (from Google AI Studio)."
+    return True, None
+
+
+def get_gemini_format_warnings() -> list[str]:
+    """Inspect all configured Gemini env keys and return non-leaking warning messages."""
+    warnings: list[str] = []
+    keys = get_configured_env_api_keys()
+    for slot_label, provider, raw_key in keys:
+        if provider == "gemini":
+            valid, msg = validate_gemini_key_format(raw_key)
+            if not valid and msg:
+                warnings.append(f"[{slot_label}] {msg}")
+    return warnings
+
+
 def get_google_oauth_config() -> dict[str, object]:
     """Return Google OAuth settings loaded from `.env` / environment."""
     client_id = os.environ.get(ENV_GOOGLE_CLIENT_ID_KEY, "").strip()

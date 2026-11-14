@@ -16,7 +16,10 @@ import uvicorn
 from backend.local_app.local_api import create_app
 
 
-def find_free_loopback_port(preferred_port: int = 0) -> int:
+DEFAULT_APP_PORT = 8765
+
+
+def find_free_loopback_port(preferred_port: int = DEFAULT_APP_PORT) -> int:
     """Bind an ephemeral or preferred port strictly on `127.0.0.1` and return it."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -41,7 +44,7 @@ def _wait_for_server(port: int, timeout_sec: float = 10.0) -> bool:
 def launch(
     *,
     headless: bool = False,
-    port: int = 0,
+    port: int = DEFAULT_APP_PORT,
     db_path: str | Path | None = None,
     require_token: bool = True,
 ) -> int:
@@ -111,8 +114,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--port",
         type=int,
-        default=0,
-        help="Loopback port on 127.0.0.1 (0 picks a free ephemeral port).",
+        default=DEFAULT_APP_PORT,
+        help="Loopback port on 127.0.0.1 (default: 8765, 0 picks a free ephemeral port).",
     )
     parser.add_argument(
         "--db-path",

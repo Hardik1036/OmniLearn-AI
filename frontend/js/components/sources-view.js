@@ -18,9 +18,16 @@ const SEARCH_FILTERS = [
   { id: 'youtube', label: 'YouTube' },
 ];
 
-const RICH_DOC_EXTS = new Set(['.pdf', '.xlsx', '.xls', '.ppt', '.pptx', '.mkv', '.webm']);
+const RICH_DOC_EXTS = new Set(['.pdf', '.xlsx', '.xls', '.ppt', '.pptx', '.mkv', '.webm', '.mov']);
 const TEXT_EXTS = new Set(['.txt', '.md', '.csv']);
-const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm']);
+const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm', '.mov']);
+
+function isLocalDesktopBackend(edition) {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  return isLoopback && edition === 'system_app';
+}
 
 function getFileExtension(filename) {
   const idx = String(filename || '').lastIndexOf('.');
@@ -350,7 +357,7 @@ export class OmnilearnSourcesView extends LitElement {
     this.errorMessage = '';
     this.videoProgress = 5;
 
-    if (!isWebLite(this.edition)) {
+    if (isLocalDesktopBackend(this.edition)) {
       this.busyMessage = `Uploading ${file.name} for native C++ OpenCV ${this.videoLayout} slicing...`;
       try {
         const formData = new FormData();
@@ -371,14 +378,14 @@ export class OmnilearnSourcesView extends LitElement {
       return;
     }
 
-    // Web Lite browser <canvas> slicer (<= 5 min, <= 8 slides)
+    // Remote Cloudflare Worker or Web Lite browser <canvas> slicer
     this.busyMessage = `Extracting keyframes from ${file.name} via browser <canvas>...`;
     try {
       const extracted = await extractVideoKeyframes(file, {
         layoutType: this.videoLayout,
         taskbarCropPx: this.taskbarCropPx,
-        maxFrames: WEB_LITE_LIMITS.maxVideoKeyframes,
-        maxDurationSec: WEB_LITE_LIMITS.maxVideoDurationSec,
+        maxFrames: isWebLite(this.edition) ? WEB_LITE_LIMITS.maxVideoKeyframes : 16,
+        maxDurationSec: isWebLite(this.edition) ? WEB_LITE_LIMITS.maxVideoDurationSec : 1800,
         onProgress: (pct) => {
           this.videoProgress = pct;
         },
@@ -391,14 +398,18 @@ export class OmnilearnSourcesView extends LitElement {
         slideForm.append('roi_key', slide.roi_key);
         slideForm.append('timestamp_sec', String(slide.timestamp_sec));
         slideForm.append('file', slide.blob, slide.filename);
-        const upRes = await apiClient.uploadSlide(slideForm);
-        if (upRes?.url || upRes?.path || upRes?.key) {
-          uploadedSlideUrls.push(upRes.url || upRes.path || upRes.key);
+        try {
+          const upRes = await apiClient.uploadSlide(slideForm);
+          if (upRes?.url || upRes?.path || upRes?.key) {
+            uploadedSlideUrls.push(upRes.url || upRes.path || upRes.key);
+          }
+        } catch (uploadErr) {
+          console.warn('Slide upload warning (R2 may be unbound):', uploadErr);
         }
       }
 
       const manifestLines = [
-        `Video Preview: ${file.name}`,
+        `Video: ${file.name}`,
         `Layout: ${extracted.layoutType} | Duration: ${Math.round(extracted.duration)}s | Resolution: ${extracted.resolution}`,
         `Taskbar Crop: ${this.taskbarCropPx}px`,
         `Extracted Keyframes (${uploadedSlideUrls.length}):`,
@@ -406,18 +417,21 @@ export class OmnilearnSourcesView extends LitElement {
           (s, i) => `- [${s.roi_key} @ ${s.timestamp_sec}s] ${uploadedSlideUrls[i] || s.filename}`
         ),
       ];
-      const manifestBlob = new File([manifestLines.join('\n')], `${file.name}.preview.txt`, {
+      const manifestBlob = new File([manifestLines.join('\n')], `${file.name}.txt`, {
         type: 'text/plain',
       });
       const formData = new FormData();
       formData.append('course_id', courseId);
+      formData.append('source_type', 'video');
+      formData.append('title', `Video: ${file.name}`);
       formData.append('layout_type', this.videoLayout);
       formData.append('taskbar_crop', String(this.taskbarCropPx));
-      formData.append('file', manifestBlob, manifestBlob.name);
+      formData.append('subject_name', (this.targetSubjectName || '').trim());
+      formData.append('file', manifestBlob, `${file.name}.txt`);
       await apiClient.ingestFile(formData);
 
       this.stagedVideoFile = null;
-      this._notifyUpdated(`Extracted ${extracted.slides.length} preview keyframes from "${file.name}".`);
+      this._notifyUpdated(`Extracted ${extracted.slides.length} keyframes from "${file.name}".`);
     } catch (err) {
       this.errorMessage = err?.message || 'Browser video extraction failed.';
     } finally {
@@ -825,6 +839,20 @@ export class OmnilearnSourcesView extends LitElement {
                   ? 'Mode: Default .env API keys active. Add your own personal key below to override defaults for your account.'
                   : 'Keys are loaded from .env defaults or encrypted at rest (AES-256-GCM). Zero key characters are ever shown.'}
               </div>
+
+              ${Array.isArray(this.pool?.invalid_format_warnings) && this.pool.invalid_format_warnings.length > 0
+                ? html`
+                    <div class="alert-warning" style="margin: 8px 0; padding: 10px 12px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; font-size: 0.8rem; color: #fbbf24;">
+                      <strong>⚠️ Key Format Diagnostic:</strong>
+                      <ul style="margin: 4px 0 0 16px; padding: 0;">
+                        ${this.pool.invalid_format_warnings.map((w) => html`<li>${w}</li>`)}
+                      </ul>
+                      <div style="margin-top: 4px; font-size: 0.75rem; color: #d1d5db;">
+                        Gemini keys must start with <code>AIzaSy...</code> (from Google AI Studio). OAuth access tokens (starting with <code>AQ.</code> or <code>ya29.</code>) cannot be used as API keys.
+                      </div>
+                    </div>
+                  `
+                : nothing}
 
               ${slots.length === 0
                 ? html`<div class="text-sm text-muted">No API keys active yet. Add keys in <code>.env</code> or paste a personal key below (internet required).</div>`

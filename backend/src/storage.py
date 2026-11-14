@@ -107,27 +107,40 @@ async def upload_slide(
     validate_jpeg_bytes(raw)
     bucket = _get_slides_bucket(env)
     if bucket is None:
-        return {"ok": False, "error": "R2 storage not configured on Cloudflare", "key": clean_key}
+        return {
+            "ok": False,
+            "error": "R2_NOT_BOUND",
+            "message": "Cloudflare R2 SLIDES_BUCKET is not bound yet. Run: npx wrangler r2 bucket create omnilearn-slides and uncomment [[r2_buckets]] in wrangler.toml.",
+            "key": clean_key,
+        }
 
-    if isinstance(bucket, dict):
-        bucket[clean_key] = {"body": raw, "content_type": content_type}
-    elif HAS_JS_FFI and to_js is not None and js is not None:
-        opts = to_js(
-            {"httpMetadata": {"contentType": content_type}},
-            dict_converter=js.Object.fromEntries,
-        )
-        await maybe_await(bucket.put(clean_key, _to_uint8_array(raw), opts))
-    else:
-        try:
-            sig = inspect.signature(bucket.put)
-            params = list(sig.parameters.values())
-            accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
-            if accepts_kwargs:
-                await maybe_await(bucket.put(clean_key, raw, content_type=content_type))
-            else:
+    try:
+        if isinstance(bucket, dict):
+            bucket[clean_key] = {"body": raw, "content_type": content_type}
+        elif HAS_JS_FFI and to_js is not None and js is not None:
+            opts = to_js(
+                {"httpMetadata": {"contentType": content_type}},
+                dict_converter=js.Object.fromEntries,
+            )
+            await maybe_await(bucket.put(clean_key, _to_uint8_array(raw), opts))
+        else:
+            try:
+                sig = inspect.signature(bucket.put)
+                params = list(sig.parameters.values())
+                accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+                if accepts_kwargs:
+                    await maybe_await(bucket.put(clean_key, raw, content_type=content_type))
+                else:
+                    await maybe_await(bucket.put(clean_key, raw))
+            except (TypeError, ValueError):
                 await maybe_await(bucket.put(clean_key, raw))
-        except (TypeError, ValueError):
-            await maybe_await(bucket.put(clean_key, raw))
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": "R2_PUT_FAILED",
+            "message": f"Failed to store slide in R2: {exc}",
+            "key": clean_key,
+        }
 
     return {
         "ok": True,

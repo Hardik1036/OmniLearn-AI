@@ -9,7 +9,7 @@ const FALLBACK_RELEASES = [
     platform: 'windows',
     arch: 'x64',
     filename: 'OmniLearn-Setup-1.0.0.exe',
-    download_url: 'https://github.com/omnilearn-ai/omnilearn/releases/latest',
+    download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
     sha256: 'verified-on-release-checksum',
     size_bytes: 48234496,
     release_notes: 'Native Edge WebView2 Desktop System App + SQLite WAL/FTS5',
@@ -20,7 +20,7 @@ const FALLBACK_RELEASES = [
     platform: 'macos',
     arch: 'universal',
     filename: 'OmniLearn-1.0.0-universal.dmg',
-    download_url: 'https://github.com/omnilearn-ai/omnilearn/releases/latest',
+    download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
     sha256: 'verified-on-release-checksum',
     size_bytes: 51380224,
     release_notes: 'Native WKWebView macOS Universal App Bundle',
@@ -31,7 +31,7 @@ const FALLBACK_RELEASES = [
     platform: 'linux',
     arch: 'x64',
     filename: 'OmniLearn-1.0.0-x86_64.AppImage',
-    download_url: 'https://github.com/omnilearn-ai/omnilearn/releases/latest',
+    download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
     sha256: 'verified-on-release-checksum',
     size_bytes: 49807360,
     release_notes: 'WebKitGTK Portable Linux AppImage',
@@ -42,7 +42,7 @@ const FALLBACK_RELEASES = [
     platform: 'android',
     arch: 'arm64',
     filename: 'OmniLearn-1.0.0-release.apk',
-    download_url: 'https://github.com/omnilearn-ai/omnilearn/releases/latest',
+    download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
     sha256: 'verified-on-release-checksum',
     size_bytes: 14680064,
     release_notes: 'Capacitor Android System WebView APK + PWA Support',
@@ -135,7 +135,15 @@ export class OmnilearnDownloadModal extends LitElement {
       const data = await apiClient.getLatestReleases();
       const list = Array.isArray(data) ? data : Array.isArray(data?.releases) ? data.releases : [];
       if (list.length > 0) {
-        this.releases = list;
+        this.releases = list.map((item) => ({
+          ...item,
+          download_url: String(item.download_url || '').replace(
+            'github.com/omnilearn-ai/omnilearn',
+            'github.com/Hardik1036/OmniLearn-AI'
+          ),
+        }));
+      } else {
+        this.releases = FALLBACK_RELEASES;
       }
     } catch (_err) {
       this.releases = FALLBACK_RELEASES;
@@ -242,6 +250,19 @@ export class OmnilearnDownloadModal extends LitElement {
                 </div>
               `;
             })}
+          </div>
+
+          <div class="source-fallback-card" style="margin: 16px 0; padding: 14px 16px; background: rgba(30, 41, 59, 0.6); border: 1px dashed var(--border-color, #334155); border-radius: 8px;">
+            <div class="row-between" style="margin-bottom: 6px;">
+              <strong style="font-size: 0.9rem;">🛠️ Run Directly from Source (Instant System Edition)</strong>
+              <span class="badge badge-emerald">Ready Now</span>
+            </div>
+            <p class="text-xs text-secondary" style="margin: 0 0 8px 0;">
+              If precompiled GitHub releases are still compiling or unpublished, run the complete System Edition immediately with full SQLite WAL + FTS5 search, local OpenCV video slicing, and no size limits:
+            </p>
+            <pre style="margin: 0; padding: 10px 12px; background: #0b1120; border-radius: 6px; font-size: 0.8rem; overflow-x: auto; color: #38bdf8;"><code>git clone https://github.com/Hardik1036/OmniLearn-AI.git
+cd OmniLearn-AI
+python -m backend.local_app.app_launcher</code></pre>
           </div>
 
           <div>

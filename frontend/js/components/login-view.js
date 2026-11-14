@@ -85,6 +85,10 @@ export class OmnilearnLoginView extends LitElement {
             api_key: rawKey,
           });
 
+      if (response?.token) {
+        apiClient.setSessionToken(response.token);
+      }
+
       this.dispatchEvent(
         new CustomEvent('auth-success', {
           bubbles: true,
@@ -106,6 +110,10 @@ export class OmnilearnLoginView extends LitElement {
     this.submitting = true;
     try {
       const response = await apiClient.launchGuestLite();
+      if (response?.token) {
+        apiClient.setSessionToken(response.token);
+      }
+
       this.dispatchEvent(
         new CustomEvent('auth-success', {
           bubbles: true,
@@ -131,6 +139,10 @@ export class OmnilearnLoginView extends LitElement {
         provider: this.provider || 'gemini',
         api_key: this.apiKey,
       });
+      if (response?.token) {
+        apiClient.setSessionToken(response.token);
+      }
+
       this.dispatchEvent(
         new CustomEvent('auth-success', {
           bubbles: true,

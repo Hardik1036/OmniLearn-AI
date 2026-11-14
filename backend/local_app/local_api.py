@@ -315,11 +315,12 @@ def create_app(
             "username": session.get("sub") if session else None,
             "email": session.get("email") if session else None,
             "name": session.get("name") if session else None,
+            "token": session.get("token") if session else None,
             "google_oauth_enabled": bool(oauth_cfg["enabled"]),
             "google_client_id": str(oauth_cfg["client_id"] or ""),
             "google_code_flow_enabled": bool(oauth_cfg["oauth_code_flow_enabled"]),
             "cloud_relay_url_configured": bool(get_cloud_relay_config().get("cloud_url")),
-            "pool": db.get_pool_summary(owner_sub=owner_sub) if session else None,
+            "pool": db.get_pool_summary(owner_sub=owner_sub),
         }
 
     @app.get("/api/auth/google/config")
@@ -602,9 +603,28 @@ def create_app(
                 "GOOGLE_OAUTH_NOT_CONFIGURED",
                 "Google browser redirect login requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in `.env`.",
             )
-        redirect_uri = str(oauth_cfg["redirect_uri"] or "").strip()
-        if not redirect_uri:
-            redirect_uri = f"{request.url.scheme}://{request.url.netloc}/api/auth/google/callback"
+        def _resolve_dynamic_redirect_uri(req: Request) -> str:
+            configured = str(oauth_cfg.get("redirect_uri") or "").strip()
+            origin = req.headers.get("origin", "").strip()
+            if origin and origin.startswith(("http://", "https://")):
+                dynamic = f"{origin.rstrip('/')}/api/auth/google/callback"
+            else:
+                host = req.headers.get("host", "").strip() or req.url.netloc
+                scheme = req.headers.get("x-forwarded-proto", "").strip() or req.url.scheme or "http"
+                dynamic = f"{scheme}://{host}/api/auth/google/callback"
+            if not configured:
+                return dynamic
+            try:
+                from urllib.parse import urlparse
+                cfg_netloc = urlparse(configured).netloc
+                req_netloc = req.headers.get("host", "").strip() or req.url.netloc
+                if cfg_netloc and req_netloc and cfg_netloc != req_netloc and ("localhost" in cfg_netloc or "127.0.0.1" in cfg_netloc):
+                    return dynamic
+            except Exception:
+                pass
+            return configured
+
+        redirect_uri = _resolve_dynamic_redirect_uri(request)
         state_jwt = _sign_jwt(
             {
                 "purpose": "google_oauth_state",
@@ -637,9 +657,29 @@ def create_app(
             return _err(400, "INVALID_OAUTH_STATE", "Google OAuth state is invalid or expired.")
 
         oauth_cfg = get_google_oauth_config()
-        redirect_uri = str(state_claims.get("redirect_uri") or oauth_cfg["redirect_uri"] or "").strip()
-        if not redirect_uri:
-            redirect_uri = f"{request.url.scheme}://{request.url.netloc}/api/auth/google/callback"
+
+        def _resolve_dynamic_redirect_uri(req: Request) -> str:
+            configured = str(oauth_cfg.get("redirect_uri") or "").strip()
+            origin = req.headers.get("origin", "").strip()
+            if origin and origin.startswith(("http://", "https://")):
+                dynamic = f"{origin.rstrip('/')}/api/auth/google/callback"
+            else:
+                host = req.headers.get("host", "").strip() or req.url.netloc
+                scheme = req.headers.get("x-forwarded-proto", "").strip() or req.url.scheme or "http"
+                dynamic = f"{scheme}://{host}/api/auth/google/callback"
+            if not configured:
+                return dynamic
+            try:
+                from urllib.parse import urlparse
+                cfg_netloc = urlparse(configured).netloc
+                req_netloc = req.headers.get("host", "").strip() or req.url.netloc
+                if cfg_netloc and req_netloc and cfg_netloc != req_netloc and ("localhost" in cfg_netloc or "127.0.0.1" in cfg_netloc):
+                    return dynamic
+            except Exception:
+                pass
+            return configured
+
+        redirect_uri = str(state_claims.get("redirect_uri") or _resolve_dynamic_redirect_uri(request)).strip()
         try:
             claims = await exchange_google_code(
                 code=code,
@@ -669,7 +709,7 @@ def create_app(
             },
             get_jwt_secret(db),
         )
-        resp = RedirectResponse(url="/", status_code=302)
+        resp = RedirectResponse(url=f"/?auth_token={token}", status_code=302)
         resp.set_cookie(
             SESSION_COOKIE_NAME,
             token,

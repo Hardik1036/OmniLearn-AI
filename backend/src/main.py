@@ -998,13 +998,7 @@ async def handle_request(request: Any, env: Any) -> Any:
             if session:
                 pool_summary = await get_pool_summary(env, owner_sub=str(session.get("sub") or ""))
             else:
-                pool_summary = {
-                    "ok": True,
-                    "edition": edition,
-                    "max_slots": 1 if is_web_lite(env) else None,
-                    "total_active_keys": 0,
-                    "slots": [],
-                }
+                pool_summary = await get_pool_summary(env, owner_sub=None)
             return make_json_response(
                 {
                     "ok": True,
@@ -1014,6 +1008,7 @@ async def handle_request(request: Any, env: Any) -> Any:
                     "username": session.get("sub") if session else None,
                     "email": session.get("email") if session else None,
                     "name": session.get("name") if session else None,
+                    "token": session.get("token") if session else None,
                     "google_oauth_enabled": bool(oauth_cfg["enabled"]),
                     "google_client_id": str(oauth_cfg["client_id"] or ""),
                     "google_code_flow_enabled": bool(oauth_cfg["code_flow_enabled"]),
@@ -1096,12 +1091,22 @@ async def handle_request(request: Any, env: Any) -> Any:
             return make_json_response(res, status=status, headers=headers)
 
         if method == "GET" and path == "/api/auth/google/start":
-            parsed_req = urlparse(str(getattr(request, "url", "") or "/"))
-            origin = f"{parsed_req.scheme}://{parsed_req.netloc}" if parsed_req.scheme and parsed_req.netloc else ""
-            fallback_cb = f"{origin}/api/auth/google/callback" if origin else "/api/auth/google/callback"
+            origin = (
+                get_header(request, "Origin").strip()
+                or (
+                    f"{get_header(request, 'X-Forwarded-Proto', 'https')}://{get_header(request, 'Host')}".strip()
+                    if get_header(request, "Host")
+                    else ""
+                )
+            )
+            if not origin:
+                parsed_req = urlparse(str(getattr(request, "url", "") or "/"))
+                origin = f"{parsed_req.scheme}://{parsed_req.netloc}" if parsed_req.scheme and parsed_req.netloc else ""
+            fallback_cb = f"{origin.rstrip('/')}/api/auth/google/callback" if origin else "/api/auth/google/callback"
             ok, payload_val, err_code = await build_google_oauth_start_url(env, fallback_cb)
             if not ok:
                 return make_json_response({"ok": False, "error": err_code, "message": payload_val}, status=503)
+            parsed_req = urlparse(str(getattr(request, "url", "") or "/"))
             q = parse_qs(parsed_req.query or "")
             if q.get("format", [""])[0] == "json":
                 return make_json_response({"ok": True, "auth_url": payload_val})
@@ -1112,8 +1117,17 @@ async def handle_request(request: Any, env: Any) -> Any:
             q = parse_qs(parsed_req.query or "")
             if q.get("error"):
                 return make_response("", status=302, headers={"Location": "/?auth_error=google_cancelled"})
-            origin = f"{parsed_req.scheme}://{parsed_req.netloc}" if parsed_req.scheme and parsed_req.netloc else ""
-            fallback_cb = f"{origin}/api/auth/google/callback" if origin else "/api/auth/google/callback"
+            origin = (
+                get_header(request, "Origin").strip()
+                or (
+                    f"{get_header(request, 'X-Forwarded-Proto', 'https')}://{get_header(request, 'Host')}".strip()
+                    if get_header(request, "Host")
+                    else ""
+                )
+            )
+            if not origin:
+                origin = f"{parsed_req.scheme}://{parsed_req.netloc}" if parsed_req.scheme and parsed_req.netloc else ""
+            fallback_cb = f"{origin.rstrip('/')}/api/auth/google/callback" if origin else "/api/auth/google/callback"
             res = await complete_google_oauth_callback(
                 env,
                 code=q.get("code", [""])[0],
@@ -1124,7 +1138,9 @@ async def handle_request(request: Any, env: Any) -> Any:
                 status = int(res.pop("status", 400))
                 return make_json_response(res, status=status)
             cookie = res.pop("cookie", None)
-            headers = {"Location": "/"}
+            token = str(res.get("token") or "")
+            location = f"/?auth_token={token}" if token else "/"
+            headers = {"Location": location}
             if cookie:
                 headers["Set-Cookie"] = cookie
             return make_response("", status=302, headers=headers)
@@ -1426,7 +1442,7 @@ async def handle_request(request: Any, env: Any) -> Any:
 
             file_tuple = files.get("file")
             filename = (file_tuple[0] if file_tuple else fields.get("filename")) or "notes.txt"
-            file_bytes = file_tuple[1] if file_tuple else b""
+            file_bytes = file_tuple[1] if file_tuple else (str(fields.get("raw_text") or "").encode("utf-8") if fields.get("raw_text") else b"")
             guard_payload = {
                 "course_id": course_id,
                 "filename": filename,
@@ -1453,14 +1469,20 @@ async def handle_request(request: Any, env: Any) -> Any:
             else:
                 # system_app mode non-text metadata record
                 raw_bytes = bytes(file_bytes or b"")
+                raw_excerpt = str(fields.get("raw_text") or f"[{src_type_inferred.upper()} source: {filename}]")[:8000]
                 parsed_src = {
                     "source_type": src_type_inferred,
-                    "title": str(filename or "document"),
+                    "title": str(fields.get("title") or filename or "document"),
                     "file_hash": sha256_hex_sync(raw_bytes or filename.encode("utf-8")),
-                    "raw_text_excerpt": f"[{src_type_inferred.upper()} source: {filename}]",
+                    "raw_text_excerpt": raw_excerpt,
                     "structured_chunks": [{"index": 1, "label": filename, "text": f"{src_type_inferred.upper()} uploaded ({len(raw_bytes)} bytes)"}],
                     "metadata": {"size_bytes": len(raw_bytes)},
                 }
+
+            if fields.get("title"):
+                parsed_src["title"] = str(fields["title"]).strip()
+            if fields.get("source_type"):
+                parsed_src["source_type"] = str(fields["source_type"]).strip()
 
             existing = await d1_first(
                 env,
@@ -1688,6 +1710,9 @@ async def handle_request(request: Any, env: Any) -> Any:
                 uploaded = await upload_slide(env, key, slide_bytes)
             except ValueError as exc:
                 return _bad_request(str(exc), error="INVALID_SLIDE")
+
+            if not uploaded.get("ok"):
+                return make_json_response(uploaded, status=503)
 
             return make_json_response(uploaded, status=201)
 

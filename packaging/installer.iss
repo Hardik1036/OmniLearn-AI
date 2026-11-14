@@ -7,7 +7,7 @@
 
 #define MyAppName "OmniLearn AI"
 #define MyAppPublisher "OmniLearn AI Project"
-#define MyAppURL "https://github.com/omnilearn-ai/omnilearn"
+#define MyAppURL "https://github.com/Hardik1036/OmniLearn-AI"
 #define MyAppExeName "OmniLearn.exe"
 #define MyAppAssocExt ".pdf,.xlsx,.pptx,.csv,.txt,.md,.mp4"
 

@@ -10,7 +10,7 @@ run_worker_first = ["/api/*"]
 binding = "ASSETS"
 
 [vars]
-RUNTIME_MODE = "web_lite"
+RUNTIME_MODE = "system_app"
 
 # Replace database_id after running: npx wrangler d1 create omnilearn-db
 [[d1_databases]]
@@ -18,14 +18,16 @@ binding = "DB"
 database_name = "omnilearn-db"
 database_id = "99ffa183-d55e-4897-a585-b91766ec0db4"
 
-# Zero-egress object storage for slide JPEGs and System App installers (enable in Cloudflare Dashboard if needed)
-# [[r2_buckets]]
-# binding = "SLIDES_BUCKET"
-# bucket_name = "omnilearn-slides"
+# Zero-egress Cloudflare R2 object storage for lecture slides and installers
+# Provision via: npx wrangler r2 bucket create omnilearn-slides
+[[r2_buckets]]
+binding = "SLIDES_BUCKET"
+bucket_name = "omnilearn-slides"
 
-# [[r2_buckets]]
-# binding = "RELEASES_BUCKET"
-# bucket_name = "omnilearn-releases"
+# Provision via: npx wrangler r2 bucket create omnilearn-releases
+[[r2_buckets]]
+binding = "RELEASES_BUCKET"
+bucket_name = "omnilearn-releases"
 
 # Replace id after running: npx wrangler kv namespace create APP_CACHE
 [[kv_namespaces]]

@@ -1,0 +1,253 @@
+"""Unit and integration tests for OmniLearn-AI critical bug fixes:
+1. Dynamic Google OAuth redirect URI resolution
+2. Client-side video extraction fallback vs local .mp4 upload routing
+3. Unbound SLIDES_BUCKET graceful handling in storage & main router
+4. Invalid Gemini API key format validation & diagnostics without key leakage
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from backend.local_app.env_config import get_gemini_format_warnings, validate_gemini_key_format
+from backend.local_app.local_db import LocalDatabase
+from backend.src.api_pool import get_pool_summary
+from backend.src.auth import build_google_oauth_start_url, resolve_effective_redirect_uri
+from backend.src.edition_guard import get_latest_releases
+from backend.src.main import handle_request
+from backend.src.storage import fetch_slide, upload_slide
+from tests.conftest import MockWorkerRequest, build_worker_env, extract_cookie_token
+
+
+async def _init_and_admin_headers(env: Any) -> dict[str, str]:
+    body: dict[str, Any] = {"username": "admin", "password": "AdminPassword123!"}
+    resp = await handle_request(MockWorkerRequest("POST", "/api/auth/init", json_body=body), env)
+    assert resp.status == 201
+    cookie = extract_cookie_token(resp.headers.get("Set-Cookie", ""))
+    return {"Authorization": f"Bearer {cookie}"}
+
+
+# ============================================================================
+# (A) Dynamic Google OAuth Redirect URI Resolution
+# ============================================================================
+
+def test_resolve_effective_redirect_uri_prefers_dynamic_request_origin():
+    # When config is empty, fallback_callback_url is used directly
+    assert (
+        resolve_effective_redirect_uri("", "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback")
+        == "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback"
+    )
+
+    # When config has hardcoded localhost:8765 but request is on Cloudflare Workers, fallback takes precedence
+    assert (
+        resolve_effective_redirect_uri(
+            "http://127.0.0.1:8765/api/auth/google/callback",
+            "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback",
+        )
+        == "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback"
+    )
+
+    # When config matches fallback host, config is preserved
+    assert (
+        resolve_effective_redirect_uri(
+            "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback",
+            "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback",
+        )
+        == "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback"
+    )
+
+
+@pytest.mark.asyncio
+async def test_worker_google_oauth_start_dynamic_redirect_uri():
+    worker_env = build_worker_env()
+    worker_env.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+    worker_env.GOOGLE_CLIENT_SECRET = "test-secret-value"
+    worker_env.GOOGLE_REDIRECT_URI = ""  # Unset so it resolves dynamically
+
+    try:
+        # Request from Cloudflare Worker public domain
+        req = MockWorkerRequest(
+            "GET",
+            "/api/auth/google/start?format=json",
+            headers={
+                "Host": "omnilearn-exam-ai.hardiknopany.workers.dev",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        res = await handle_request(req, worker_env)
+        assert res.status == 200
+        data = res.json()
+        assert data["ok"] is True
+        auth_url = data["auth_url"]
+
+        # Verify redirect_uri embedded in Google Auth URL matches the incoming worker domain
+        parsed = urlparse(auth_url)
+        params = parse_qs(parsed.query)
+        assert params["redirect_uri"][0] == "https://omnilearn-exam-ai.hardiknopany.workers.dev/api/auth/google/callback"
+        assert params["client_id"][0] == "test-client-id.apps.googleusercontent.com"
+    finally:
+        worker_env.DB.close()
+
+
+# ============================================================================
+# (B) Client-Side Video Extraction Fallback vs Local Ingest
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_video_source_manifest_ingest_accepted():
+    worker_env = build_worker_env(runtime_mode="system_app")
+    try:
+        admin_hdrs = await _init_and_admin_headers(worker_env)
+
+        # Create course first
+        create_res = await handle_request(
+            MockWorkerRequest("POST", "/api/courses", headers=admin_hdrs, json_body={"title": "Video Lecture Course"}),
+            worker_env,
+        )
+        assert create_res.status == 201
+        course_id = create_res.json()["course"]["id"]
+
+        # Ingest video manifest text generated by client-side video-extractor
+        manifest_text = (
+            "Video: operating_systems_lecture.mp4\n"
+            "Layout: 2x2 | Duration: 120s | Resolution: 1280x720\n"
+            "Taskbar Crop: 48px\n"
+            "Extracted Keyframes (2):\n"
+            "- [q1 @ 10s] /api/slides/courses/test/q1_t10s.jpg\n"
+            "- [q2 @ 30s] /api/slides/courses/test/q2_t30s.jpg\n"
+        )
+        ingest_res = await handle_request(
+            MockWorkerRequest(
+                "POST",
+                "/api/sources/ingest-file",
+                headers=admin_hdrs,
+                json_body={
+                    "course_id": course_id,
+                    "filename": "operating_systems_lecture.mp4.txt",
+                    "source_type": "video",
+                    "title": "Video: operating_systems_lecture.mp4",
+                    "raw_text": manifest_text,
+                },
+            ),
+            worker_env,
+        )
+        assert ingest_res.status == 201
+        body = ingest_res.json()
+        assert body["ok"] is True
+        assert body["source"]["source_type"] == "video"
+        assert "Video: operating_systems_lecture.mp4" in body["source"]["title"]
+    finally:
+        worker_env.DB.close()
+
+
+# ============================================================================
+# (C) Unbound SLIDES_BUCKET Graceful Handling
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_unbound_slides_bucket_graceful_handling():
+    # Build worker env with SLIDES_BUCKET deliberately set to None
+    worker_env = build_worker_env(runtime_mode="system_app")
+    admin_hdrs = await _init_and_admin_headers(worker_env)
+    worker_env.SLIDES_BUCKET = None
+
+    try:
+        # 1. upload_slide function returns diagnostic dict instead of crashing
+        jpeg_payload = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 32
+        res = await upload_slide(worker_env, "courses/c1/slide_1.jpg", jpeg_payload)
+        assert res["ok"] is False
+        assert res["error"] == "R2_NOT_BOUND"
+        assert "omnilearn-slides" in res["message"]
+
+        # 2. fetch_slide returns None cleanly without throwing
+        fetched = await fetch_slide(worker_env, "courses/c1/slide_1.jpg")
+        assert fetched is None
+
+        # 3. POST /api/slides/upload responds with HTTP 503 instead of 500 error
+        api_res = await handle_request(
+            MockWorkerRequest(
+                "POST",
+                "/api/slides/upload",
+                headers=admin_hdrs,
+                form_data={
+                    "course_id": "c1",
+                    "file": ("slide_1.jpg", jpeg_payload),
+                },
+            ),
+            worker_env,
+        )
+        assert api_res.status == 503
+        api_data = api_res.json()
+        assert api_data["ok"] is False
+        assert api_data["error"] == "R2_NOT_BOUND"
+    finally:
+        worker_env.DB.close()
+
+
+# ============================================================================
+# (D) Gemini API Key Format Validation & Diagnostics
+# ============================================================================
+
+def test_gemini_key_format_validation():
+    # Standard AI Studio API key starting with AIza
+    valid, msg = validate_gemini_key_format("AIzaSy_MOCK_VALID_KEY_FOR_TESTING_12345")
+    assert valid is True
+    assert msg is None
+
+    # OAuth access token starting with AQ.
+    dummy_oauth = "AQ.TEST_OAUTH_ACCESS_TOKEN_FOR_UNIT_TEST"
+    valid_oauth, msg_oauth = validate_gemini_key_format(dummy_oauth)
+    assert valid_oauth is False
+    assert "OAuth" in msg_oauth
+    # Ensure zero characters of the secret token leaked in error message
+    assert "TEST_OAUTH" not in msg_oauth
+
+    # Empty string is harmless
+    valid_empty, _ = validate_gemini_key_format("")
+    assert valid_empty is True
+
+
+@pytest.mark.asyncio
+async def test_api_pool_surfaces_invalid_format_warnings_without_leak(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "AQ.TEST_OAUTH_ACCESS_TOKEN_FOR_UNIT_TEST")
+    monkeypatch.setenv("GEMINI_KEY_1", "ya29.TEST_OAUTH_ACCESS_TOKEN_FOR_UNIT_TEST")
+
+    warnings = get_gemini_format_warnings()
+    assert len(warnings) >= 2
+    for w in warnings:
+        assert "Gemini key appears to be a Google OAuth/access token" in w
+        # Critical security check: No token characters in warning!
+        assert "AQ." not in w
+        assert "ya29." not in w
+
+    worker_env = build_worker_env()
+    worker_env.GEMINI_API_KEY = "AQ.TEST_OAUTH_ACCESS_TOKEN_FOR_UNIT_TEST"
+    try:
+        pool = await get_pool_summary(worker_env)
+        assert "invalid_format_warnings" in pool
+        assert len(pool["invalid_format_warnings"]) >= 1
+        assert "TEST_OAUTH" not in json.dumps(pool)
+    finally:
+        worker_env.DB.close()
+
+
+# ============================================================================
+# (E) GitHub Releases Fallback URL Validation
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_get_latest_releases_uses_correct_repo_urls():
+    worker_env = build_worker_env()
+    try:
+        releases = await get_latest_releases(worker_env)
+        assert len(releases) >= 4
+        for rel in releases:
+            assert "Hardik1036/OmniLearn-AI" in rel["download_url"]
+            assert "omnilearn-ai/omnilearn" not in rel["download_url"]
+            assert rel["source_fallback_command"] == "python -m backend.local_app.app_launcher"
+    finally:
+        worker_env.DB.close()

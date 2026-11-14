@@ -49,7 +49,16 @@ def resolve_db_path(db_path: str | Path | None = None) -> Path:
     env_path = os.environ.get("OMNILEARN_DB_PATH", "").strip()
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return (Path.home() / ".omnilearn" / "omnilearn_local.db").resolve()
+    default_dir = Path.home() / ".omnilearn"
+    try:
+        default_dir.mkdir(parents=True, exist_ok=True)
+        test_file = default_dir / ".write_test"
+        test_file.touch()
+        test_file.unlink(missing_ok=True)
+    except (PermissionError, OSError):
+        default_dir = Path(__file__).resolve().parent.parent.parent / ".omnilearn"
+        default_dir.mkdir(parents=True, exist_ok=True)
+    return (default_dir / "omnilearn_local.db").resolve()
 
 
 def sanitize_local_slide_key(key: str) -> str:
@@ -90,7 +99,12 @@ class LocalDatabase:
         seed_sample_data: bool = True,
     ) -> None:
         self.db_path = resolve_db_path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError):
+            self.db_path = (Path(__file__).resolve().parent.parent.parent / ".omnilearn" / "omnilearn_local.db").resolve()
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
         env_assets = os.environ.get("OMNILEARN_ASSETS_DIR", "").strip()
         if assets_dir is not None:
             self.assets_dir = Path(assets_dir).expanduser().resolve()
@@ -98,7 +112,12 @@ class LocalDatabase:
             self.assets_dir = Path(env_assets).expanduser().resolve()
         else:
             self.assets_dir = (self.db_path.parent / "assets").resolve()
-        self.assets_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self.assets_dir.mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError):
+            self.assets_dir = (Path(__file__).resolve().parent.parent.parent / ".omnilearn" / "assets").resolve()
+            self.assets_dir.mkdir(parents=True, exist_ok=True)
 
         self._write_lock = threading.RLock()
         self._wrapping_key: bytes | None = None
@@ -760,6 +779,12 @@ class LocalDatabase:
                 }
             )
 
+        try:
+            from .env_config import get_gemini_format_warnings
+        except ImportError:
+            from env_config import get_gemini_format_warnings
+        invalid_format_warnings = get_gemini_format_warnings()
+
         return {
             "ok": True,
             "edition": "system_app",
@@ -776,6 +801,7 @@ class LocalDatabase:
             "total_db_keys": personal_total,
             "env_keys_configured": default_total,
             "slots": slots,
+            "invalid_format_warnings": invalid_format_warnings,
         }
 
     def get_candidate_keys(

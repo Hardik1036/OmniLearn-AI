@@ -199,6 +199,12 @@ export class OmnilearnApp extends LitElement {
 
       try {
         const url = new URL(window.location.href);
+        const authToken = url.searchParams.get('auth_token');
+        if (authToken) {
+          apiClient.setSessionToken(authToken);
+          url.searchParams.delete('auth_token');
+          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+        }
         if (url.searchParams.get('auth_error')) {
           this.bootError = 'Google Sign-In was cancelled or failed. Please try again.';
           url.searchParams.delete('auth_error');
@@ -206,6 +212,10 @@ export class OmnilearnApp extends LitElement {
         }
       } catch (_err) {
         // Ignore URL parsing errors
+      }
+
+      if (auth?.token) {
+        apiClient.setSessionToken(auth.token);
       }
 
       if (this.authenticated) {

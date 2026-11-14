@@ -45,6 +45,21 @@ class EditionLimitError(Exception):
         self.message = message
 
 
+def validate_gemini_key_format(key: str) -> tuple[bool, str | None]:
+    """Check if a Gemini API key matches standard format (`AIza...`).
+    Returns `(is_valid, warning_message)`.
+    Never returns any plaintext characters of the key itself.
+    """
+    clean = (key or "").strip()
+    if not clean:
+        return True, None
+    if not clean.startswith("AIza"):
+        if clean.startswith("AQ.") or clean.startswith("ya29."):
+            return False, "Gemini key appears to be a Google OAuth/access token, not an AI Studio API key starting with 'AIza'."
+        return False, "Gemini API key should start with 'AIza' (from Google AI Studio)."
+    return True, None
+
+
 def validate_api_key_input(api_key: str, provider: str = "gemini") -> tuple[str, str]:
     """Validate and normalize API key text and provider name."""
     clean_key = (api_key or "").strip()
@@ -279,6 +294,13 @@ async def get_pool_summary(env: Any, owner_sub: str | None = None) -> dict[str, 
             }
         )
 
+    invalid_format_warnings: list[str] = []
+    for sec_id, sec_provider, sec_val in fallback_secrets:
+        if sec_provider == "gemini":
+            is_valid, warn_msg = validate_gemini_key_format(sec_val)
+            if not is_valid and warn_msg:
+                invalid_format_warnings.append(f"[{sec_id}] {warn_msg}")
+
     return {
         "ok": True,
         "edition": "web_lite" if is_web_lite(env) else "system_app",
@@ -290,6 +312,7 @@ async def get_pool_summary(env: Any, owner_sub: str | None = None) -> dict[str, 
         "total_db_keys": personal_total,
         "fallback_secrets_configured": default_total,
         "slots": slots,
+        "invalid_format_warnings": invalid_format_warnings,
     }
 
 
