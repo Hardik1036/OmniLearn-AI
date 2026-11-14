@@ -283,11 +283,14 @@ def _not_found(msg: str = "Resource not found") -> Any:
 
 
 def _format_source_row(row: dict[str, Any]) -> dict[str, Any]:
+    raw_title = str(row.get("title") or "")
+    # Strip any internal .mp4.txt or .mov.txt suffixes from titles
+    raw_title = re.sub(r"\.(mp4|mov|avi|mkv|webm)\.txt$", r".\1", raw_title, flags=re.IGNORECASE)
     return {
         "id": str(row.get("id") or ""),
         "course_id": str(row.get("course_id") or ""),
         "source_type": str(row.get("source_type") or "txt"),
-        "title": str(row.get("title") or ""),
+        "title": raw_title,
         "origin_url": str(row.get("origin_url") or ""),
         "search_query": str(row.get("search_query") or ""),
         "file_hash": str(row.get("file_hash") or ""),
@@ -1497,27 +1500,68 @@ async def handle_request(request: Any, env: Any) -> Any:
                 return blocked
 
             src_type_inferred = str(guard_payload["source_type"] or "txt").lower()
+            clean_filename = re.sub(r"\.(mp4|mov|avi|mkv|webm)\.txt$", r".\1", filename, flags=re.IGNORECASE)
             if src_type_inferred in ("txt", "csv"):
                 try:
                     max_allowed = MAX_WEB_LITE_FILE_BYTES if is_web_lite(env) else 25 * 1024 * 1024
-                    parsed_src = parse_safe_text_or_csv(filename, file_bytes, max_bytes=max_allowed)
+                    parsed_src = parse_safe_text_or_csv(clean_filename, file_bytes, max_bytes=max_allowed)
                 except ValueError as exc:
                     return _bad_request(str(exc))
             else:
-                # system_app mode non-text metadata record
+                # Non-txt files (e.g. video lectures with keyframes and transcripts, or rich docs)
                 raw_bytes = bytes(file_bytes or b"")
-                raw_excerpt = str(fields.get("raw_text") or f"[{src_type_inferred.upper()} source: {filename}]")[:8000]
+                text_content = ""
+                if fields.get("raw_text"):
+                    text_content = str(fields["raw_text"]).strip()
+                elif raw_bytes:
+                    try:
+                        decoded = raw_bytes.decode("utf-8")
+                        if decoded and all(c.isprintable() or c in "\r\n\t " for c in decoded[:400]):
+                            text_content = decoded.strip()
+                    except Exception:
+                        text_content = ""
+
+                if text_content:
+                    raw_excerpt = text_content[:8000]
+                    lines = [ln.strip() for ln in text_content.splitlines() if ln.strip()]
+                    chunks = [
+                        {"index": idx + 1, "label": f"{clean_filename} (Section {idx + 1})", "text": "\n".join(lines[j : j + 15])}
+                        for idx, j in enumerate(range(0, min(len(lines), 150), 15))
+                    ]
+                    if not chunks:
+                        chunks = [{"index": 1, "label": clean_filename, "text": text_content[:2000]}]
+                else:
+                    raw_excerpt = f"[{src_type_inferred.upper()} source: {clean_filename}]"
+                    chunks = [{"index": 1, "label": clean_filename, "text": f"{src_type_inferred.upper()} uploaded ({len(raw_bytes)} bytes)"}]
+
+                meta = {"size_bytes": len(raw_bytes)}
+                if fields.get("metadata"):
+                    try:
+                        m = json.loads(fields["metadata"]) if isinstance(fields["metadata"], str) else fields["metadata"]
+                        if isinstance(m, dict):
+                            meta.update(m)
+                    except Exception:
+                        pass
+                if fields.get("layout_type"):
+                    meta["layout_type"] = str(fields["layout_type"])
+                if fields.get("taskbar_crop"):
+                    meta["taskbar_crop"] = str(fields["taskbar_crop"])
+
+                clean_title = str(fields.get("title") or clean_filename or "document")
+                clean_title = re.sub(r"\.(mp4|mov|avi|mkv|webm)\.txt$", r".\1", clean_title, flags=re.IGNORECASE)
+
                 parsed_src = {
                     "source_type": src_type_inferred,
-                    "title": str(fields.get("title") or filename or "document"),
-                    "file_hash": sha256_hex_sync(raw_bytes or filename.encode("utf-8")),
+                    "title": clean_title,
+                    "file_hash": sha256_hex_sync(raw_bytes or clean_filename.encode("utf-8")),
                     "raw_text_excerpt": raw_excerpt,
-                    "structured_chunks": [{"index": 1, "label": filename, "text": f"{src_type_inferred.upper()} uploaded ({len(raw_bytes)} bytes)"}],
-                    "metadata": {"size_bytes": len(raw_bytes)},
+                    "structured_chunks": chunks,
+                    "metadata": meta,
                 }
 
             if fields.get("title"):
-                parsed_src["title"] = str(fields["title"]).strip()
+                t_val = str(fields["title"]).strip()
+                parsed_src["title"] = re.sub(r"\.(mp4|mov|avi|mkv|webm)\.txt$", r".\1", t_val, flags=re.IGNORECASE)
             if fields.get("source_type"):
                 parsed_src["source_type"] = str(fields["source_type"]).strip()
 

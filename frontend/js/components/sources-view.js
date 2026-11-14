@@ -451,18 +451,30 @@ export class OmnilearnSourcesView extends LitElement {
         }
       }
 
-      const manifestBlob = new File([manifestLines.join('\n')], `${file.name}.txt`, {
+      const manifestText = manifestLines.join('\n');
+      const manifestBlob = new File([manifestText], file.name, {
         type: 'text/plain',
       });
       const formData = new FormData();
       formData.append('course_id', courseId);
       formData.append('source_type', 'video');
       formData.append('title', `Video: ${file.name}`);
+      formData.append('filename', file.name);
+      formData.append('raw_text', manifestText);
       formData.append('layout_type', this.videoLayout);
       formData.append('taskbar_crop', String(this.taskbarCropPx));
       formData.append('subject_name', (this.targetSubjectName || '').trim());
       formData.append('visual_assets', JSON.stringify(visualAssets));
-      formData.append('file', manifestBlob, `${file.name}.txt`);
+      formData.append(
+        'metadata',
+        JSON.stringify({
+          duration_sec: Math.round(extracted.duration),
+          resolution: extracted.resolution,
+          slide_count: extracted.slides.length,
+          layout_type: extracted.layoutType,
+        })
+      );
+      formData.append('file', manifestBlob, file.name);
       await apiClient.ingestFile(formData);
 
       this.stagedVideoFile = null;
@@ -677,6 +689,125 @@ export class OmnilearnSourcesView extends LitElement {
     }
   }
 
+  _renderSourcePreview(src) {
+    const isVideo = src.source_type === 'video';
+    const visualAssets = Array.isArray(src.visual_assets) ? src.visual_assets : [];
+    const hasVisuals = visualAssets.length > 0;
+
+    let excerpt = String(src.raw_text_excerpt || '').trim();
+    if (isVideo) {
+      excerpt = excerpt.replace(/^\[VIDEO\s+source:[^\]]+\]/i, '').trim();
+    }
+
+    const transcriptLines = [];
+    if (excerpt) {
+      const lines = excerpt.split('\n');
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        if (
+          line.startsWith('Video:') ||
+          line.startsWith('Layout:') ||
+          line.startsWith('Taskbar Crop:') ||
+          line.startsWith('Extracted Keyframes') ||
+          line.startsWith('Synchronized Lecture Transcripts:')
+        ) {
+          continue;
+        }
+        if (line.startsWith('- [') && line.includes('@') && (line.includes('/api/slides/') || line.includes('.jpg'))) {
+          continue;
+        }
+        const match = line.match(/^-\s*\[([0-9:]+)\]\s*([^:]+):\s*(.+)$/);
+        if (match) {
+          transcriptLines.push({ time: match[1], speaker: match[2], text: match[3] });
+        } else if (isVideo && line.startsWith('- [')) {
+          const m2 = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
+          if (m2) {
+            transcriptLines.push({ time: m2[1], speaker: 'Lecture', text: m2[2] });
+          }
+        }
+      }
+    }
+
+    if (isVideo || hasVisuals) {
+      return html`
+        <div class="video-preview-panel stack-sm">
+          <div class="row-between">
+            <div class="row-wrap" style="gap: 6px; align-items: center;">
+              <span class="badge badge-blue">📹 Video Lecture Preview</span>
+              ${src.metadata?.duration_sec
+                ? html`<span class="badge">${Math.round(src.metadata.duration_sec / 60)} min</span>`
+                : nothing}
+              ${visualAssets.length > 0
+                ? html`<span class="badge badge-emerald">${visualAssets.length} Visual Slides</span>`
+                : nothing}
+            </div>
+            <span class="text-xs text-muted">Ready for AI Course Synthesis</span>
+          </div>
+
+          ${hasVisuals
+            ? html`
+                <div class="stack-xs" style="margin-top: 6px;">
+                  <div class="text-xs font-semibold text-secondary">Captured Lecture Keyframes &amp; Slides:</div>
+                  <div class="video-slide-strip">
+                    ${visualAssets.map((asset) => {
+                      const rawPath = typeof asset === 'string' ? asset : asset.url || asset.path || '';
+                      const srcUrl = apiClient.getSlideUrl(rawPath);
+                      const label = typeof asset === 'object' ? asset.label || asset.caption || 'Slide' : 'Slide';
+                      const ts = typeof asset === 'object' ? asset.timestamp || `${asset.timestamp_sec || 0}s` : '';
+                      return html`
+                        <div class="video-slide-thumb">
+                          ${srcUrl
+                            ? html`<img src=${srcUrl} alt=${label} loading="lazy" />`
+                            : html`<div style="height: 90px; display: flex; align-items: center; justify-content: center; color: #94A3B8; font-size: 11px;">Slide Frame</div>`}
+                          <div class="video-slide-info">
+                            <span class="text-xs" style="color: #F1F5F9; font-size: 10px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 95px;">${label}</span>
+                            ${ts ? html`<span class="video-transcript-time" style="font-size: 9px; padding: 1px 4px;">${ts}</span>` : nothing}
+                          </div>
+                        </div>
+                      `;
+                    })}
+                  </div>
+                </div>
+              `
+            : nothing}
+
+          ${transcriptLines.length > 0
+            ? html`
+                <div class="stack-xs" style="margin-top: 8px;">
+                  <div class="text-xs font-semibold text-secondary">Synchronized Lecture Audio Transcript:</div>
+                  <div class="video-transcript-box">
+                    ${transcriptLines.map(
+                      (item) => html`
+                        <div class="video-transcript-row">
+                          <span class="video-transcript-time">${item.time}</span>
+                          <div>
+                            <strong>${item.speaker}:</strong> <span>${item.text}</span>
+                          </div>
+                        </div>
+                      `
+                    )}
+                  </div>
+                </div>
+              `
+            : html`
+                <div class="text-xs text-muted" style="margin-top: 4px; font-style: italic;">
+                  ${hasVisuals
+                    ? 'Visual keyframe slides captured and indexed. These slides will be embedded into notes, diagrams, and study plan.'
+                    : 'Video indexed. Ready for course synthesis.'}
+                </div>
+              `}
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="transcript-box" style="max-height: 150px; margin-top: 8px;">
+        ${excerpt || 'No text excerpt extracted.'}
+      </div>
+    `;
+  }
+
   render() {
     const course = this.courseData?.course;
     const sources = this._getSources();
@@ -774,6 +905,7 @@ export class OmnilearnSourcesView extends LitElement {
                           : src.metadata?.duration_sec
                           ? `${Math.round(src.metadata.duration_sec / 60)}m`
                           : '';
+                        const displayTitle = (src.title || '').replace(/\.(mp4|mov|avi|mkv|webm)\.txt$/i, '.$1');
                         return html`
                           <div class="queue-item">
                             <div class="row-between">
@@ -783,7 +915,7 @@ export class OmnilearnSourcesView extends LitElement {
                                   ${pageMeta ? html`<span class="badge">${pageMeta}</span>` : nothing}
                                   <span class="badge badge-emerald">${src.status || 'PARSED'}</span>
                                 </div>
-                                <strong style="word-break: break-word;">${src.title}</strong>
+                                <strong style="word-break: break-word;">${displayTitle}</strong>
                                 ${safeOrigin
                                   ? html`<a class="text-xs" href=${safeOrigin} target="_blank" rel="noopener noreferrer">${safeOrigin}</a>`
                                   : nothing}
@@ -813,11 +945,7 @@ export class OmnilearnSourcesView extends LitElement {
                             </div>
 
                             ${expanded
-                              ? html`
-                                  <div class="transcript-box" style="max-height: 150px;">
-                                    ${src.raw_text_excerpt || 'No text excerpt extracted.'}
-                                  </div>
-                                `
+                              ? this._renderSourcePreview(src)
                               : nothing}
                           </div>
                         `;
