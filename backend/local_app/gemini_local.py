@@ -18,7 +18,7 @@ from backend.local_app.parsers.doc_parsers import sanitize_plain_text
 
 GEMINI_MODEL_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent?key={api_key}"
+    "gemini-3.8-flash:generateContent?key={api_key}"
 )
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -119,44 +119,67 @@ async def _invoke_provider(
     expect_json: bool = True,
 ) -> tuple[int, str]:
     if provider == "gemini":
-        url = GEMINI_MODEL_URL.format(api_key=quote_plus(api_key))
-        gen_cfg: dict[str, Any] = {"temperature": 0.25}
-        if expect_json:
-            gen_cfg["responseMimeType"] = "application/json"
-        body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": gen_cfg,
-        }
-        resp = await client.post(url, json=body)
-        if resp.status_code == 200:
-            try:
-                payload = resp.json()
-                parts = payload["candidates"][0]["content"]["parts"]
-                return 200, str(parts[0].get("text", ""))
-            except Exception:
-                return 502, resp.text
-        return resp.status_code, resp.text
+        gemini_models = ("gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash")
+        last_status = 503
+        last_text = "Gemini service unavailable"
+        for model in gemini_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={quote_plus(api_key)}"
+            gen_cfg: dict[str, Any] = {"temperature": 0.25}
+            if expect_json:
+                gen_cfg["responseMimeType"] = "application/json"
+            body = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": gen_cfg,
+            }
+            resp = await client.post(url, json=body)
+            if resp.status_code == 200:
+                try:
+                    payload = resp.json()
+                    parts = payload["candidates"][0]["content"]["parts"]
+                    return 200, str(parts[0].get("text", ""))
+                except Exception:
+                    return 502, resp.text
+            last_status, last_text = resp.status_code, resp.text
+            if resp.status_code not in (404, 503):
+                break
+        return last_status, last_text
 
     if provider in {"groq", "openrouter"}:
         url = GROQ_CHAT_URL if provider == "groq" else OPENROUTER_CHAT_URL
-        model = "llama-3.3-70b-versatile" if provider == "groq" else "google/gemini-2.0-flash-exp:free"
-        body: dict[str, Any] = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.25,
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "OmniLearn-AI/1.0",
         }
-        if expect_json and provider == "groq":
-            body["response_format"] = {"type": "json_object"}
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = await client.post(url, headers=headers, json=body)
-        if resp.status_code == 200:
-            try:
-                payload = resp.json()
-                content = payload["choices"][0]["message"]["content"]
-                return 200, str(content)
-            except Exception:
-                return 502, resp.text
-        return resp.status_code, resp.text
+        if provider == "openrouter":
+            headers["HTTP-Referer"] = "https://omnilearn.ai"
+            headers["X-Title"] = "OmniLearn AI"
+            models_to_try = ("openrouter/auto", "meta-llama/llama-3.3-70b-instruct")
+        else:
+            models_to_try = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
+
+        last_status = 503
+        last_text = f"{provider} unavailable"
+        for model in models_to_try:
+            body: dict[str, Any] = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.25,
+            }
+            if expect_json and provider == "groq":
+                body["response_format"] = {"type": "json_object"}
+            resp = await client.post(url, headers=headers, json=body)
+            if resp.status_code == 200:
+                try:
+                    payload = resp.json()
+                    content = payload["choices"][0]["message"]["content"]
+                    return 200, str(content)
+                except Exception:
+                    return 502, resp.text
+            last_status, last_text = resp.status_code, resp.text
+            if resp.status_code not in (404, 503):
+                break
+        return last_status, last_text
 
     return 400, f"Unsupported provider: {provider}"
 
