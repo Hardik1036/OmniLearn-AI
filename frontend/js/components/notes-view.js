@@ -5,7 +5,7 @@ import {
   isWebLite,
   promptSystemAppDownload,
 } from '../edition-gate.js';
-import { exportNotesMarkdown } from '../export-utils.js';
+import { exportNotesPdf, exportNotesMarkdown } from '../export-utils.js';
 
 export class OmnilearnNotesView extends LitElement {
   static properties = {
@@ -46,6 +46,21 @@ export class OmnilearnNotesView extends LitElement {
         detail: { subjectId },
       })
     );
+  }
+
+  async _handleExportPdf(subject, courseTitle, forcePrint = false) {
+    if (!subject) return;
+    const mermaidSvg = this.querySelector('[data-mermaid-diagram] svg')?.outerHTML || '';
+    const formulaEls = this.querySelectorAll('[data-formula-latex]');
+    const renderedFormulas = Array.from(formulaEls).map((el) => ({
+      latex: el.getAttribute('data-formula-latex') || '',
+      html: el.innerHTML,
+    }));
+    await exportNotesPdf(subject, courseTitle, this.edition, {
+      renderedMermaidSvg: mermaidSvg,
+      renderedFormulas,
+      forcePrint,
+    });
   }
 
   _getCurrentSubject() {
@@ -161,14 +176,15 @@ export class OmnilearnNotesView extends LitElement {
               )}
             </div>
 
-            <!-- Material 3 Split Button for Notes Export -->
+            <!-- Material 3 Split Button for Notes Export (PDF default with Visuals) -->
             <div class="split-button-container split-outline">
               <button
                 type="button"
                 class="btn btn-outline btn-sm split-button-action"
-                @click=${() => exportNotesMarkdown(subject, courseTitle, this.edition)}
+                @click=${() => this._handleExportPdf(subject, courseTitle, false)}
+                title="Download publication-grade academic PDF with diagrams, slide visuals, and formulas"
               >
-                📥 Download Notes (.MD) ${webLite ? '🔒' : ''}
+                📥 Download Notes (PDF) ${webLite ? '🔒' : ''}
               </button>
               <div class="split-button-divider"></div>
               <button
@@ -192,20 +208,30 @@ export class OmnilearnNotesView extends LitElement {
                         class="split-dropdown-item"
                         @click=${() => {
                           this.exportDropdownOpen = false;
-                          exportNotesMarkdown(subject, courseTitle, this.edition);
+                          this._handleExportPdf(subject, courseTitle, false);
                         }}
                       >
-                        📝 Download Markdown (.MD)
+                        📄 Download PDF (.pdf)
                       </button>
                       <button
                         type="button"
                         class="split-dropdown-item"
                         @click=${() => {
                           this.exportDropdownOpen = false;
-                          window.print();
+                          this._handleExportPdf(subject, courseTitle, true);
                         }}
                       >
                         🖨️ Print / Save as PDF
+                      </button>
+                      <button
+                        type="button"
+                        class="split-dropdown-item"
+                        @click=${() => {
+                          this.exportDropdownOpen = false;
+                          exportNotesMarkdown(subject, courseTitle, this.edition);
+                        }}
+                      >
+                        📝 Download Markdown (.md)
                       </button>
                     </div>
                   `
@@ -302,6 +328,15 @@ export class OmnilearnNotesView extends LitElement {
                         <div class="text-sm text-secondary">
                           ${c.explanation || c.description || c.detail || ''}
                         </div>
+                        ${c.exam_tip
+                          ? html`
+                              <div
+                                style="margin-top: 6px; font-size: 0.8rem; background: #FEF3C7; color: #92400E; border-left: 3px solid #D97706; padding: 4px 8px; border-radius: 4px; font-weight: 500;"
+                              >
+                                💡 <strong>Exam Tip:</strong> ${c.exam_tip}
+                              </div>
+                            `
+                          : nothing}
                         ${conceptSlideSrc
                           ? html`
                               <div

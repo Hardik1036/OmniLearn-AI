@@ -885,6 +885,7 @@ def _apply_ai_payload_to_subject(
                     "title": sanitize_plain_text(str(c.get("title") or c.get("name") or "Concept")),
                     "name": sanitize_plain_text(str(c.get("name") or c.get("title") or "Concept")),
                     "explanation": sanitize_plain_text(str(c.get("explanation") or "")),
+                    "exam_tip": sanitize_plain_text(str(c.get("exam_tip") or "")),
                     "citation": sanitize_plain_text(str(c.get("citation") or course_title)),
                     "slide_url": s_url,
                     "slide_caption": s_cap,
@@ -1003,18 +1004,21 @@ async def synthesize_course_sources(
 
     prompt = (
         "You are OmniLearn AI, an elite university tutor and exam synthesis engine.\n"
-        "Synthesize an in-depth, rigorous JSON study pack for this subject with exact keys:\n"
+        "Synthesize a deeply technical, pedagogical, academic JSON study pack for this subject with exact keys:\n"
         "`title`: Concise subject title.\n"
         "`topic`: Subject topic.\n"
-        "`summary`: Rigorous 3-paragraph executive summary detailing (1) Theoretical motivation & foundational concepts, "
-        "(2) Core mechanisms, invariant properties, and state transitions, and (3) Practical tradeoffs, complexity bounds, and real-world implementations.\n"
-        "`mermaid_diagram`: A comprehensive, multi-stage architecture flowchart (`flowchart TD`) with 8 to 14 distinct nodes "
+        "`summary`: Rigorous, clear 3-paragraph executive summary detailing (1) Intuitive theoretical motivation, mental models & fundamental principles, "
+        "(2) Core mechanisms, architectural state transitions, and invariant properties, and (3) Practical tradeoffs, asymptotic complexity, and real-world failure modes.\n"
+        "`mermaid_diagram`: A publication-quality, multi-stage architecture flowchart (`flowchart TD`) with 8 to 14 distinct nodes "
         "organized into `subgraph` sections (e.g. Ingestion, Processing, Architecture, Verification). "
-        "Every node label containing parentheses or quotes MUST be strictly enclosed in double quotes (e.g. A[\"Label (with info)\"]). "
+        "Every node label containing parentheses, brackets, or quotes MUST be strictly enclosed in double quotes (e.g. A[\"Label (with info)\"]). "
         "Include condition labels on connector edges (e.g. -->|\"Valid\"| B).\n"
-        "`key_concepts`: List of 6 to 12 in-depth concepts ({title, explanation, citation, slide_url, slide_caption, slide_timestamp}). "
-        "For each concept, attach the most relevant `slide_url` from the Available Visual Video Slides list below so lecture slides illustrate the notes.\n"
-        "`math_formulas`: List of 4 to 8 rigorous mathematical expressions ({name, latex, note}) with complete KaTeX equations.\n"
+        "`key_concepts`: List of 6 to 12 in-depth concepts ({title, explanation, exam_tip, citation, slide_url, slide_caption, slide_timestamp}). "
+        "For `explanation`, provide 3-5 comprehensive sentences explaining the underlying mechanism and mental model. "
+        "For `exam_tip`, provide actionable exam advice or common trap to avoid. "
+        "Attach the most relevant `slide_url` from the Available Visual Video Slides list below so lecture slides illustrate the notes.\n"
+        "`math_formulas`: List of 4 to 8 rigorous mathematical expressions ({name, latex, note}) with complete KaTeX equations. "
+        "In `note`, explain what each variable means and how to apply the formula in problem-solving.\n"
         "`quizzes`: List of 5+ high-yield MCQs ({id, question, options, correct_index, explanation, citation}).\n"
         "`exam_questions`: List of Section A/B/C university examination questions ({id, section, marks, question, rubric, model_answer}).\n\n"
         f"Course: {course['title']}\n"

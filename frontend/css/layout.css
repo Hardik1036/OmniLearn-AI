@@ -289,3 +289,50 @@
   box-shadow: var(--shadow-lg);
   padding: 10px;
 }
+
+/* Print Media Styles for High-Quality PDF Output & Clean Printing */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+  body {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+  }
+  .app-header,
+  .pill-tab,
+  .pill-strip,
+  .split-button-container,
+  .mobile-menu-btn,
+  .bottom-nav,
+  .drawer,
+  .drawer-backdrop,
+  .toast-banner,
+  .edition-banner,
+  .btn,
+  .boot-shell,
+  #boot-retry-btn {
+    display: none !important;
+  }
+  .app-container,
+  .content-area,
+  .reading-measure {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .card {
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+    border: 1px solid #E2E8F0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .mermaid svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
