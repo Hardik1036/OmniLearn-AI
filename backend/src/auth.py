@@ -400,16 +400,21 @@ async def _worker_http_json(
         headers["Content-Type"] = "application/x-www-form-urlencoded"
         body = urlencode(form_data)
 
-    if _HAS_JS_FETCH and _js is not None:
-        opts: dict[str, Any] = {"method": method, "headers": headers}
+    if _HAS_JS_FETCH and _js is not None and _to_js is not None:
+        opts: dict[str, Any] = {"method": method.upper()}
+        if headers:
+            opts["headers"] = headers
         if body is not None:
             opts["body"] = body
-        resp = await _js.fetch(url, _to_js(opts))
-        text = await resp.text()
+        dict_converter = getattr(_js.Object, "fromEntries", None)
+        converted_opts = _to_js(opts, dict_converter=dict_converter) if dict_converter else _to_js(opts)
+        resp = await _js.fetch(url, converted_opts)
+        status = int(resp.status)
+        text = str(await resp.text())
         try:
-            return int(resp.status), json.loads(text) if text else {}
+            return status, json.loads(text) if text else {}
         except Exception:
-            return int(resp.status), {}
+            return status, {"raw": text}
 
     import httpx
 
@@ -646,7 +651,17 @@ async def complete_google_oauth_callback(
         },
     )
     if status != 200 or not isinstance(token_data, dict):
-        return {"ok": False, "status": 401, "error": "INVALID_GOOGLE_TOKEN", "message": "Google authorization code exchange failed."}
+        err_code = str(token_data.get("error") or "") if isinstance(token_data, dict) else ""
+        err_desc = str(token_data.get("error_description") or "") if isinstance(token_data, dict) else ""
+        err_msg = f"{err_code}: {err_desc}" if (err_code and err_desc) else (err_desc or err_code or "Unknown upstream error")
+        msg = f"Google authorization code exchange failed (HTTP {status}): {err_msg}"
+        return {
+            "ok": False,
+            "status": 401,
+            "error": "INVALID_GOOGLE_TOKEN",
+            "message": msg,
+            "details": {"status": status, "error": err_code, "error_description": err_desc, "redirect_uri": redirect_uri},
+        }
     return await login_with_google(env, str(token_data.get("id_token") or ""))
 
 

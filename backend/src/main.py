@@ -10,7 +10,7 @@ import uuid
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from typing import Any
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
 try:
     from .api_pool import EditionLimitError, add_personal_api_key, get_candidate_keys, get_pool_summary, remove_api_key
@@ -1136,7 +1136,15 @@ async def handle_request(request: Any, env: Any) -> Any:
             )
             if not res.get("ok"):
                 status = int(res.pop("status", 400))
-                return make_json_response(res, status=status)
+                accept_hdr = get_header(request, "Accept")
+                if "application/json" in accept_hdr and "text/html" not in accept_hdr:
+                    return make_json_response(res, status=status)
+                err_msg = str(res.get("message") or "Google Sign-In failed.")
+                return make_response(
+                    "",
+                    status=302,
+                    headers={"Location": f"/?auth_error=google_failed&auth_error_msg={quote_plus(err_msg)}"},
+                )
             cookie = res.pop("cookie", None)
             token = str(res.get("token") or "")
             location = f"/?auth_token={token}" if token else "/"

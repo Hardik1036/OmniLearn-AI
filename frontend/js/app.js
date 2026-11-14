@@ -206,8 +206,9 @@ export class OmnilearnApp extends LitElement {
           window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
         }
         if (url.searchParams.get('auth_error')) {
-          this.bootError = 'Google Sign-In was cancelled or failed. Please try again.';
+          this.bootError = url.searchParams.get('auth_error_msg') || 'Google Sign-In was cancelled or failed. Please try again.';
           url.searchParams.delete('auth_error');
+          url.searchParams.delete('auth_error_msg');
           window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
         }
       } catch (_err) {
