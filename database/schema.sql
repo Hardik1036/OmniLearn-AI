@@ -66,10 +66,12 @@ CREATE TABLE IF NOT EXISTS courses (
     status TEXT DEFAULT 'READY',
     progress INTEGER DEFAULT 100,
     current_stage TEXT DEFAULT 'Ready',
+    owner_sub TEXT NOT NULL DEFAULT 'admin',
     created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_courses_created ON courses(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_courses_owner ON courses(owner_sub, created_at DESC);
 
 -- 4. WINDOW ROIS TABLE (For Multi-Window Lecture Videos)
 CREATE TABLE IF NOT EXISTS window_rois (

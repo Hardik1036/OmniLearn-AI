@@ -244,7 +244,9 @@ export class OmnilearnApp extends LitElement {
       this.pool = poolRes.value;
     }
 
-    const savedActiveId = readStorage('omnilearn_active_course_id');
+    const userKey = this.userEmail || this.userName || 'user';
+    const storageKey = `omnilearn_active_course_id_${userKey}`;
+    const savedActiveId = readStorage(storageKey) || readStorage('omnilearn_active_course_id');
     const targetId =
       preferredCourseId ||
       (this.courses.some((c) => c.id === this.activeCourseId)
@@ -254,6 +256,7 @@ export class OmnilearnApp extends LitElement {
         : this.courses[0]?.id || '');
 
     if (targetId) {
+      writeStorage(storageKey, targetId);
       writeStorage('omnilearn_active_course_id', targetId);
       await this._loadCourseDetail(targetId);
     } else {
@@ -267,6 +270,8 @@ export class OmnilearnApp extends LitElement {
   async _loadCourseDetail(courseId) {
     if (!courseId) return;
     this.activeCourseId = courseId;
+    const userKey = this.userEmail || this.userName || 'user';
+    writeStorage(`omnilearn_active_course_id_${userKey}`, courseId);
     writeStorage('omnilearn_active_course_id', courseId);
     try {
       const raw = await apiClient.getCourse(courseId);

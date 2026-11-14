@@ -51,7 +51,7 @@ GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 _VALID_GOOGLE_ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
 
 SESSION_COOKIE_NAME = "omnilearn_session"
-SESSION_TTL_SECONDS = 86400         # 24h for Admin
+SESSION_TTL_SECONDS = 30 * 86400    # 30 days persistent session for smooth user experience
 GUEST_TTL_SECONDS = 14400           # 4h for Web Lite guest preview
 RATE_LIMIT_MAX_FAILS = 5
 RATE_LIMIT_WINDOW_SECONDS = 900     # 15 minutes

@@ -11,6 +11,7 @@ binding = "ASSETS"
 
 [vars]
 RUNTIME_MODE = "system_app"
+MASTER_SECRET = "05e7ef9021ee18facffee1f67752f53efdbe3da9b0455d5afa3e5594fc79b6b0"
 
 # Replace database_id after running: npx wrangler d1 create omnilearn-db
 [[d1_databases]]

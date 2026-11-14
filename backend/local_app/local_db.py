@@ -155,6 +155,7 @@ class LocalDatabase:
             is_fresh_db = (row["cnt"] if row else 0) == 0
 
             self._migrate_legacy_api_keys(conn)
+            self._migrate_legacy_courses(conn)
             conn.executescript(schema_sql)
             conn.executescript(local_sql)
             if seed_sample_data and is_fresh_db and seed_path.is_file():
@@ -218,6 +219,18 @@ class LocalDatabase:
             """
         )
         conn.execute("DROP TABLE _api_keys_legacy")
+
+    @staticmethod
+    def _migrate_legacy_courses(conn: sqlite3.Connection) -> None:
+        """Upgrade legacy `courses` table in-place to include `owner_sub`."""
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='courses'"
+        ).fetchone()
+        if not tbl:
+            return
+        cols = {str(r["name"]) for r in conn.execute("PRAGMA table_info(courses)").fetchall()}
+        if "owner_sub" not in cols:
+            conn.execute("ALTER TABLE courses ADD COLUMN owner_sub TEXT NOT NULL DEFAULT 'admin'")
 
     # ------------------------------------------------------------------
     # Wrapping Key & AES-256-GCM Encryption (OS Keyring + 0600 fallback)
@@ -962,6 +975,7 @@ class LocalDatabase:
         video_name: str = "",
         course_id: str | None = None,
         rois: list[dict[str, Any]] | None = None,
+        owner_sub: str = "admin",
     ) -> dict[str, Any]:
         cid = course_id or f"course-{uuid.uuid4().hex[:12]}"
         clean_title = (title or "").strip() or "Untitled Multi-Source Course"
@@ -970,10 +984,10 @@ class LocalDatabase:
             conn.execute(
                 """
                 INSERT INTO courses
-                    (id, title, video_name, video_duration, resolution, layout_type, source_count, edition_origin, status, progress, current_stage)
-                VALUES (?, ?, ?, 0.0, 'MULTI_SOURCE', ?, 0, 'system_app', 'READY', 100, 'Ready')
+                    (id, title, video_name, video_duration, resolution, layout_type, source_count, edition_origin, status, progress, current_stage, owner_sub)
+                VALUES (?, ?, ?, 0.0, 'MULTI_SOURCE', ?, 0, 'system_app', 'READY', 100, 'Ready', ?)
                 """,
-                (cid, clean_title, video_name, clean_layout),
+                (cid, clean_title, video_name, clean_layout, owner_sub),
             )
             if rois:
                 for roi in rois:

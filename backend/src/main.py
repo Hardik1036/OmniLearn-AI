@@ -270,8 +270,8 @@ def _unauthorized(msg: str = "Authentication required") -> Any:
     return make_json_response({"ok": False, "error": "UNAUTHORIZED", "message": msg}, status=401)
 
 
-def _forbidden(msg: str = "Admin access required") -> Any:
-    return make_json_response({"ok": False, "error": "FORBIDDEN", "message": msg}, status=403)
+def _forbidden(msg: str = "Admin access required", error: str = "FORBIDDEN") -> Any:
+    return make_json_response({"ok": False, "error": error, "message": msg}, status=403)
 
 
 def _bad_request(msg: str, error: str = "BAD_REQUEST") -> Any:
@@ -1247,7 +1247,14 @@ async def handle_request(request: Any, env: Any) -> Any:
 
         # Courses CRUD
         if method == "GET" and path == "/api/courses":
-            rows = await d1_all(env, "SELECT * FROM courses ORDER BY created_at DESC, id DESC")
+            if is_admin:
+                rows = await d1_all(env, "SELECT * FROM courses ORDER BY created_at DESC, id DESC")
+            else:
+                rows = await d1_all(
+                    env,
+                    "SELECT * FROM courses WHERE owner_sub = ? OR owner_sub = 'system_sample' ORDER BY created_at DESC, id DESC",
+                    (owner_sub,),
+                )
             return make_json_response({"ok": True, "courses": [dict(r) for r in rows]})
 
         if method == "POST" and path == "/api/courses":
@@ -1262,13 +1269,13 @@ async def handle_request(request: Any, env: Any) -> Any:
                 """
                 INSERT INTO courses
                     (id, title, video_name, video_duration, resolution, layout_type, source_count,
-                     edition_origin, status, progress, current_stage)
-                VALUES (?, ?, '', 0.0, 'MULTI_SOURCE', ?, 0, ?, 'DRAFT', 0, 'Sources')
+                     edition_origin, status, progress, current_stage, owner_sub)
+                VALUES (?, ?, '', 0.0, 'MULTI_SOURCE', ?, 0, ?, 'DRAFT', 0, 'Sources', ?)
                 """,
-                (course_id, title[:180], layout, edition),
+                (course_id, title[:180], layout, edition, owner_sub),
             )
             created = await d1_first(env, "SELECT * FROM courses WHERE id = ?", (course_id,))
-            return make_json_response({"ok": True, "course": dict(created or {"id": course_id, "title": title})}, status=201)
+            return make_json_response({"ok": True, "course": dict(created or {"id": course_id, "title": title, "owner_sub": owner_sub})}, status=201)
 
         if method == "GET" and path.startswith("/api/courses/"):
             course_id = unquote(path[len("/api/courses/") :]).strip()
@@ -1278,7 +1285,7 @@ async def handle_request(request: Any, env: Any) -> Any:
 
         if method == "DELETE" and path.startswith("/api/courses/"):
             if not is_admin:
-                return _forbidden("Only Admin sessions can delete courses.")
+                return _forbidden("Only Admin sessions can delete courses.", error="ADMIN_REQUIRED")
             course_id = unquote(path[len("/api/courses/") :]).strip()
             existing = await d1_first(env, "SELECT id FROM courses WHERE id = ?", (course_id,))
             if not existing:
