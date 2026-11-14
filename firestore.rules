@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for auth & validation
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidScore(data) {
+      return data.score is number && data.score >= 0 && data.score <= 100;
+    }
+
+    // User profile documents: only the owner can read or write
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Quiz Progress subcollection: students can record & review their own quiz attempts
+      match /quiz_progress/{progressId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidScore(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // Exam attempts subcollection: only owner can manage their exam submissions
+      match /exam_attempts/{attemptId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Flashcards & Bookmarks subcollection
+      match /bookmarks/{bookmarkId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Public course catalog: read-only for authenticated students, writes restricted
+    match /public_courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin managed via backend CLI or Firebase Admin SDK
+    }
+
+    // Catch-all: deny all other collections by default (zero-trust security)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

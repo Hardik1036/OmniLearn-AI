@@ -29,6 +29,58 @@ export class OmnilearnQuizView extends LitElement {
     this.saving = false;
     this.lastSavedScore = null;
     this.errorMessage = '';
+    this._boundKeyDown = null;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._boundKeyDown = this._handleKeyDown.bind(this);
+    window.addEventListener('keydown', this._boundKeyDown);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._boundKeyDown) {
+      window.removeEventListener('keydown', this._boundKeyDown);
+      this._boundKeyDown = null;
+    }
+  }
+
+  _handleKeyDown(e) {
+    const tag = (e.target?.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) {
+      return;
+    }
+
+    const subject = this._getCurrentSubject();
+    if (!subject) return;
+
+    const allQuestions = Array.isArray(subject.quizzes) ? subject.quizzes : [];
+    const webLite = isWebLite(this.edition);
+    const visibleQuestions = webLite
+      ? allQuestions.slice(0, WEB_LITE_LIMITS.maxQuizQuestions)
+      : allQuestions;
+    if (visibleQuestions.length === 0) return;
+
+    // Find the current unanswered question
+    const currentIdx = visibleQuestions.findIndex((_, idx) => !this.submittedQuestions[this._qKey(subject.id, idx)]);
+    if (currentIdx === -1) return;
+
+    const key = e.key.toUpperCase();
+    const optMap = { '1': 0, '2': 1, '3': 2, '4': 3, 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
+    if (optMap[key] !== undefined) {
+      const q = visibleQuestions[currentIdx];
+      const opts = Array.isArray(q.options) ? q.options : [];
+      if (optMap[key] < opts.length) {
+        this._pickOption(subject.id, currentIdx, optMap[key]);
+      }
+    } else if (e.key === 'Enter') {
+      const qKey = this._qKey(subject.id, currentIdx);
+      if (this.selectedAnswers[qKey] !== undefined && !this.submittedQuestions[qKey]) {
+        e.preventDefault();
+        this._submitSingleQuestion(subject, currentIdx, visibleQuestions);
+      }
+    }
   }
 
   createRenderRoot() {
@@ -164,6 +216,19 @@ export class OmnilearnQuizView extends LitElement {
       : allQuestions;
     const lockedCount = Math.max(0, allQuestions.length - visibleQuestions.length);
 
+    const answeredCount = visibleQuestions.filter((_, idx) => !!this.submittedQuestions[this._qKey(subject.id, idx)]).length;
+    let correctSoFar = 0;
+    visibleQuestions.forEach((q, idx) => {
+      const qKey = this._qKey(subject.id, idx);
+      if (this.submittedQuestions[qKey]) {
+        const picked = this.selectedAnswers[qKey];
+        const correctIdx = this._resolveCorrectIndex(q);
+        if (picked === correctIdx) correctSoFar++;
+      }
+    });
+    const progressPct = visibleQuestions.length > 0 ? Math.round((answeredCount / visibleQuestions.length) * 100) : 0;
+    const accuracyPct = answeredCount > 0 ? Math.round((correctSoFar / answeredCount) * 100) : 0;
+
     return html`
       <div class="stack-md">
         <div class="card">
@@ -194,6 +259,23 @@ export class OmnilearnQuizView extends LitElement {
           </div>
         </div>
 
+        <div class="card quiz-progress-card">
+          <div class="row-between">
+            <div class="row-wrap" style="gap: 8px; align-items: center;">
+              <span class="badge badge-blue">Progress: ${answeredCount} / ${visibleQuestions.length} Answered</span>
+              ${answeredCount > 0 ? html`<span class="badge ${accuracyPct >= 70 ? 'badge-emerald' : 'badge-amber'}">🎯 ${accuracyPct}% Accuracy (${correctSoFar}/${answeredCount})</span>` : nothing}
+            </div>
+            <div class="row-wrap" style="gap: 6px; align-items: center;">
+              <span class="text-muted" style="font-size: 0.78rem;">Keys:</span>
+              <kbd class="kbd-hint">1-4</kbd>
+              <kbd class="kbd-hint">Enter</kbd>
+            </div>
+          </div>
+          <div class="quiz-progress-track">
+            <div class="quiz-progress-fill" style="width: ${progressPct}%;"></div>
+          </div>
+        </div>
+
         ${this.errorMessage ? html`<div class="alert-error" role="alert">${this.errorMessage}</div>` : nothing}
 
         ${this.lastSavedScore !== null
@@ -219,7 +301,10 @@ export class OmnilearnQuizView extends LitElement {
                   return html`
                     <div class="card stack-sm">
                       <div class="row-between">
-                        <span class="badge badge-blue">Question ${idx + 1}</span>
+                        <div class="row-wrap" style="gap: 8px; align-items: center;">
+                          <span class="badge badge-blue">Question ${idx + 1}</span>
+                          ${q.concept || q.topic ? html`<span class="concept-pill">💡 ${q.concept || q.topic}</span>` : nothing}
+                        </div>
                         ${q.difficulty ? html`<span class="badge">${q.difficulty}</span>` : nothing}
                       </div>
 
@@ -247,6 +332,7 @@ export class OmnilearnQuizView extends LitElement {
                             >
                               <span class="badge">${String.fromCharCode(65 + optIdx)}</span>
                               <span style="flex: 1;">${opt}</span>
+                              <kbd class="kbd-hint">${optIdx + 1}</kbd>
                             </button>
                           `;
                         })}
@@ -260,7 +346,7 @@ export class OmnilearnQuizView extends LitElement {
                                 class="btn btn-primary btn-sm"
                                 @click=${() => this._submitSingleQuestion(subject, idx, visibleQuestions)}
                               >
-                                Submit Answer
+                                Submit Answer <kbd class="kbd-hint" style="margin-left: 6px; background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4);">Enter</kbd>
                               </button>
                             `
                           : html`
