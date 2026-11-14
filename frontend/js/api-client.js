@@ -17,8 +17,12 @@ export class ApiError extends Error {
   }
 }
 
-function readStorage(key) {
+export function readStorage(key) {
   try {
+    if (typeof localStorage !== 'undefined') {
+      const val = localStorage.getItem(key);
+      if (val !== null && val !== undefined && val !== '') return val;
+    }
     if (typeof sessionStorage !== 'undefined') {
       return sessionStorage.getItem(key) || '';
     }
@@ -28,8 +32,15 @@ function readStorage(key) {
   return '';
 }
 
-function writeStorage(key, value) {
+export function writeStorage(key, value) {
   try {
+    if (typeof localStorage !== 'undefined') {
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    }
     if (typeof sessionStorage !== 'undefined') {
       if (value) {
         sessionStorage.setItem(key, value);

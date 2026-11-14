@@ -68,6 +68,8 @@ def get_gemini_models_for_task(task: str | None = None) -> tuple[str, ...]:
             "gemini-4-hydrogen",
             "gemini-3.8-flash",
             "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
         )
@@ -76,6 +78,8 @@ def get_gemini_models_for_task(task: str | None = None) -> tuple[str, ...]:
         models = (
             "gemini-3.8-flash",
             "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
         )
@@ -240,7 +244,7 @@ async def _invoke_provider(
             headers["X-Title"] = "OmniLearn AI"
             models_to_try = ("meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-001", "openrouter/auto")
         else:
-            models_to_try = ("openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+            models_to_try = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
 
         last_status = 503
         last_text = f"{provider} unavailable"

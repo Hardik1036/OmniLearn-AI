@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import { apiClient } from './api-client.js';
+import { apiClient, readStorage, writeStorage } from './api-client.js';
 import {
   isWebLite,
   normalizeCourseData,
@@ -176,6 +176,26 @@ export class OmnilearnApp extends LitElement {
     this.booting = true;
     this.bootError = '';
     try {
+      // 1. Immediately extract OAuth auth_token or errors from URL before querying auth status!
+      try {
+        const url = new URL(window.location.href);
+        const authToken = url.searchParams.get('auth_token');
+        if (authToken) {
+          apiClient.setSessionToken(authToken);
+          url.searchParams.delete('auth_token');
+          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+        }
+        if (url.searchParams.get('auth_error')) {
+          this.bootError = url.searchParams.get('auth_error_msg') || 'Google Sign-In was cancelled or failed. Please try again.';
+          url.searchParams.delete('auth_error');
+          url.searchParams.delete('auth_error_msg');
+          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+        }
+      } catch (_err) {
+        // Ignore URL parsing errors
+      }
+
+      // 2. Query health & auth status (session token attached via Authorization header if present)
       const [healthRes, authRes] = await Promise.allSettled([
         apiClient.getHealth(),
         apiClient.getAuthStatus(),
@@ -196,25 +216,6 @@ export class OmnilearnApp extends LitElement {
       if (auth?.pool) {
         this.pool = auth.pool;
       }
-
-      try {
-        const url = new URL(window.location.href);
-        const authToken = url.searchParams.get('auth_token');
-        if (authToken) {
-          apiClient.setSessionToken(authToken);
-          url.searchParams.delete('auth_token');
-          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-        }
-        if (url.searchParams.get('auth_error')) {
-          this.bootError = url.searchParams.get('auth_error_msg') || 'Google Sign-In was cancelled or failed. Please try again.';
-          url.searchParams.delete('auth_error');
-          url.searchParams.delete('auth_error_msg');
-          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-        }
-      } catch (_err) {
-        // Ignore URL parsing errors
-      }
-
       if (auth?.token) {
         apiClient.setSessionToken(auth.token);
       }
@@ -243,11 +244,17 @@ export class OmnilearnApp extends LitElement {
       this.pool = poolRes.value;
     }
 
+    const savedActiveId = readStorage('omnilearn_active_course_id');
     const targetId =
       preferredCourseId ||
-      (this.courses.some((c) => c.id === this.activeCourseId) ? this.activeCourseId : this.courses[0]?.id || '');
+      (this.courses.some((c) => c.id === this.activeCourseId)
+        ? this.activeCourseId
+        : (savedActiveId && this.courses.some((c) => c.id === savedActiveId))
+        ? savedActiveId
+        : this.courses[0]?.id || '');
 
     if (targetId) {
+      writeStorage('omnilearn_active_course_id', targetId);
       await this._loadCourseDetail(targetId);
     } else {
       this.activeCourseId = '';
@@ -260,6 +267,7 @@ export class OmnilearnApp extends LitElement {
   async _loadCourseDetail(courseId) {
     if (!courseId) return;
     this.activeCourseId = courseId;
+    writeStorage('omnilearn_active_course_id', courseId);
     try {
       const raw = await apiClient.getCourse(courseId);
       const normalized = normalizeCourseData(raw);
@@ -330,6 +338,9 @@ export class OmnilearnApp extends LitElement {
       const newId = created?.id || '';
       this.creatingCourse = false;
       this.newCourseTitle = '';
+      if (newId) {
+        writeStorage('omnilearn_active_course_id', newId);
+      }
       await this._loadWorkspace(newId);
       this.activeTab = 'sources';
       this.drawerOpen = false;
@@ -343,6 +354,7 @@ export class OmnilearnApp extends LitElement {
     if (!this.activeCourseId) return;
     try {
       await apiClient.deleteCourse(this.activeCourseId);
+      writeStorage('omnilearn_active_course_id', '');
       this.activeCourseId = '';
       await this._loadWorkspace();
       this._showToast('Course deleted.');

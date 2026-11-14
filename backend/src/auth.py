@@ -95,10 +95,10 @@ def get_client_ip(request: Any) -> str:
 
 
 def build_session_cookie(token: str, max_age: int = SESSION_TTL_SECONDS) -> str:
-    """Build strict HttpOnly + Secure + SameSite=Strict session cookie string."""
+    """Build HttpOnly + Secure + SameSite=Lax session cookie string for OAuth compatibility."""
     return (
         f"{SESSION_COOKIE_NAME}={token}; "
-        f"HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age={int(max_age)}"
+        f"HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={int(max_age)}"
     )
 
 
@@ -106,7 +106,7 @@ def clear_session_cookie() -> str:
     """Build cookie clearing directive."""
     return (
         f"{SESSION_COOKIE_NAME}=; "
-        "HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0"
+        "HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0"
     )
 
 

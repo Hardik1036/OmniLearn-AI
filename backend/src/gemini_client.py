@@ -121,6 +121,8 @@ def get_gemini_models_for_task(task: str | None = None) -> tuple[str, ...]:
             "gemini-4-hydrogen",
             "gemini-3.8-flash",
             "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
         )
@@ -130,6 +132,8 @@ def get_gemini_models_for_task(task: str | None = None) -> tuple[str, ...]:
         models = (
             "gemini-3.8-flash",
             "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
         )
@@ -352,7 +356,7 @@ async def _invoke_provider(
             headers["X-Title"] = "OmniLearn AI"
             models_to_try = ("meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-001", "openrouter/auto")
         else:
-            models_to_try = ("openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+            models_to_try = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
 
         last_status = 503
         last_text = f"{provider} unavailable"
@@ -984,12 +988,29 @@ async def synthesize_course(
         + (f"{slide_summary}\n" if slide_summary else "")
     )
 
+    multimodal_parts: list[dict[str, Any]] = []
+    for s in (slide_urls or [])[:4]:
+        raw_val = ""
+        if isinstance(s, dict):
+            raw_val = str(s.get("url") or s.get("data") or s.get("image_base64") or "")
+        elif isinstance(s, str):
+            raw_val = s
+        if raw_val.startswith("data:"):
+            try:
+                hdr, b64 = raw_val.split(",", 1)
+                mime = hdr.split(";")[0].replace("data:", "").strip()
+                if mime.startswith("image/"):
+                    multimodal_parts.append({"inlineData": {"mimeType": mime, "data": b64.strip()}})
+            except Exception:
+                pass
+
     ai_resp = await call_ai_with_pool(
         env,
         prompt,
         expect_json=True,
         cache_endpoint="courses_synthesize",
         owner_sub=owner_sub,
+        multimodal_parts=multimodal_parts if multimodal_parts else None,
     )
     if not ai_resp or not isinstance(ai_resp.get("data"), dict):
         raise AIServiceRequiredError(
