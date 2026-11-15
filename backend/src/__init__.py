@@ -1,6 +1,6 @@
 """OmniLearn Cloudflare Free-Plan Python Worker package."""
 
-__version__ = "1.0.0"
+__version__ = "1.6.0"
 
 __all__ = [
     "api_pool",

@@ -10,8 +10,8 @@ const FALLBACK_RELEASES = [
     arch: 'x64',
     filename: 'OmniLearn-Windows-x64-v1.6.0.zip',
     download_url: 'https://github.com/Hardik1036/OmniLearn-AI/releases/latest',
-    sha256: '765b787f333bd554599d058c0e05bb25ee16e46ccb11ad58baf3aa4d409a45ad',
-    size_bytes: 174427828,
+    sha256: 'fb9fd748ceb9272f57cd04d061fe0d698b7e308d2b5eaddcf01cbb4843b6974a',
+    size_bytes: 174428223,
     release_notes: 'Native Desktop App with instant offline smart search & private storage',
   },
   {

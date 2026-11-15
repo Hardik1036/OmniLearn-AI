@@ -5,10 +5,28 @@ from __future__ import annotations
 import argparse
 import secrets
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
+
+# Ensure standard streams are never None in PyInstaller windowed GUI mode
+class _NullStream:
+    def write(self, s: Any) -> int:
+        return len(str(s))
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+
+if sys.stdout is None:
+    sys.stdout = _NullStream()
+if sys.stderr is None:
+    sys.stderr = _NullStream()
 
 import httpx
 import uvicorn
@@ -64,6 +82,7 @@ def launch(
         port=bound_port,
         log_level="warning",
         access_log=False,
+        log_config=None,
     )
     server = uvicorn.Server(config)
 

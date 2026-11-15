@@ -46,33 +46,52 @@ def main() -> None:
         sys.exit(1)
     print(f"Authenticated as: {user_res.json().get('login')}")
 
+    # Compute sha256
+    import hashlib
+    hasher = hashlib.sha256()
+    with open(ZIP_PATH, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    computed_sha256 = hasher.hexdigest()
+    print(f"Computed SHA-256: {computed_sha256}")
+
+    release_body = (
+        "# OmniLearn AI Desktop System App v1.6.0 🚀\n\n"
+        "## 📦 What's New in Version 1.6.0\n\n"
+        "- **Standalone Native Windows System App**: Bundled portable executable (`OmniLearn.exe`) powered by Edge WebView2, local FastAPI backend, SQLite WAL/FTS5 full-text indexing, and OpenCV multi-window lecture video parsing.\n"
+        "- **AI Study Tutor & Application Assistant Chatbot**: Integrated academic tutor for doubts clearing (KaTeX math, concepts, code) and application feature navigation.\n"
+        "- **Academic PDF Notes Exporter**: Export unified study notes with extracted slide visuals and diagrams as clean formatted PDFs.\n"
+        "- **Multi-Window Lecture Parsing**: Extract split-screen slides and transcripts from lecture videos (2x2 grid or 1x2 split screen).\n"
+        "- **Offline Private Storage & Smart Search**: Instant full-text search across all notes, slides, and transcripts with zero cloud limits.\n\n"
+        "---\n\n"
+        "### 💻 Download & Run (Windows x64)\n\n"
+        "1. Download **`OmniLearn-Windows-x64-v1.6.0.zip`** below.\n"
+        "2. Extract the ZIP archive to your desired folder.\n"
+        "3. Double-click **`OmniLearn.exe`**.\n\n"
+        "### 🔒 Cryptographic Verification\n"
+        "- **File**: `OmniLearn-Windows-x64-v1.6.0.zip`\n"
+        f"- **SHA-256 Checksum**: `{computed_sha256}`\n"
+    )
+
     # Check if release v1.6.0 already exists
     existing = httpx.get("https://api.github.com/repos/Hardik1036/OmniLearn-AI/releases/tags/v1.6.0", headers=headers)
     if existing.status_code == 200:
         release = existing.json()
-        print(f"Release v1.6.0 already exists (id: {release['id']})")
+        print(f"Release v1.6.0 already exists (id: {release['id']}) - updating release body...")
+        patch_res = httpx.patch(
+            f"https://api.github.com/repos/Hardik1036/OmniLearn-AI/releases/{release['id']}",
+            headers=headers,
+            json={"body": release_body, "name": "OmniLearn AI Desktop System App v1.6.0"},
+        )
+        if patch_res.status_code == 200:
+            release = patch_res.json()
+            print("Successfully updated release body.")
     else:
         release_data = {
             "tag_name": "v1.6.0",
             "target_commitish": "main",
             "name": "OmniLearn AI Desktop System App v1.6.0",
-            "body": (
-                "# OmniLearn AI Desktop System App v1.6.0 🚀\n\n"
-                "## 📦 What's New in Version 1.6.0\n\n"
-                "- **Standalone Native Windows System App**: Bundled portable executable (`OmniLearn.exe`) powered by Edge WebView2, local FastAPI backend, SQLite WAL/FTS5 full-text indexing, and OpenCV multi-window lecture video parsing.\n"
-                "- **AI Study Tutor & Application Assistant Chatbot**: Integrated academic tutor for doubts clearing (KaTeX math, concepts, code) and application feature navigation.\n"
-                "- **Academic PDF Notes Exporter**: Export unified study notes with extracted slide visuals and diagrams as clean formatted PDFs.\n"
-                "- **Multi-Window Lecture Parsing**: Extract split-screen slides and transcripts from lecture videos (2x2 grid or 1x2 split screen).\n"
-                "- **Offline Private Storage & Smart Search**: Instant full-text search across all notes, slides, and transcripts with zero cloud limits.\n\n"
-                "---\n\n"
-                "### 💻 Download & Run (Windows x64)\n\n"
-                "1. Download **`OmniLearn-Windows-x64-v1.6.0.zip`** below.\n"
-                "2. Extract the ZIP archive to your desired folder.\n"
-                "3. Double-click **`OmniLearn.exe`**.\n\n"
-                "### 🔒 Cryptographic Verification\n"
-                "- **File**: `OmniLearn-Windows-x64-v1.6.0.zip`\n"
-                "- **SHA-256 Checksum**: `765b787f333bd554599d058c0e05bb25ee16e46ccb11ad58baf3aa4d409a45ad`\n"
-            ),
+            "body": release_body,
             "draft": False,
             "prerelease": False,
         }
